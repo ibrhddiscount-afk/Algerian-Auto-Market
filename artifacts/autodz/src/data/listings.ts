@@ -1,0 +1,56 @@
+export interface Listing {
+  id: number;
+  title: string;
+  marque: string;
+  modele: string;
+  year: number;
+  kmRaw: number;
+  km: string;
+  fuel: "Essence" | "Diesel" | "GPL" | "Électrique" | "Hybride";
+  transmission: "Manuelle" | "Automatique";
+  location: string;
+  wilaya: string;
+  priceRaw: number;
+  price: string;
+  color: string;
+  verified: boolean;
+  badge?: string;
+}
+
+export const ALL_LISTINGS: Listing[] = [
+  { id: 1,  title: "Volkswagen Golf 7",      marque: "Volkswagen", modele: "Golf",     year: 2018, kmRaw: 120000, km: "120 000 km", fuel: "Essence",    transmission: "Manuelle",    location: "Alger Centre",  wilaya: "Alger",      priceRaw: 2350000, price: "2 350 000", color: "from-gray-200 to-gray-400",    verified: true  },
+  { id: 2,  title: "Renault Clio 4",         marque: "Renault",    modele: "Clio",     year: 2017, kmRaw: 98000,  km: "98 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Oran",          wilaya: "Oran",       priceRaw: 1600000, price: "1 600 000", color: "from-amber-100 to-amber-300",  verified: true  },
+  { id: 3,  title: "Hyundai i20",            marque: "Hyundai",    modele: "i20",      year: 2019, kmRaw: 70000,  km: "70 000 km",  fuel: "Essence",    transmission: "Manuelle",    location: "Bir Mourad",    wilaya: "Alger",      priceRaw: 1950000, price: "1 950 000", color: "from-blue-100 to-blue-300",    verified: false },
+  { id: 4,  title: "Peugeot 208",            marque: "Peugeot",    modele: "208",      year: 2016, kmRaw: 110000, km: "110 000 km", fuel: "Diesel",     transmission: "Manuelle",    location: "Alger",         wilaya: "Alger",      priceRaw: 1380000, price: "1 380 000", color: "from-slate-100 to-slate-300",  verified: true  },
+  { id: 5,  title: "Dacia Logan",            marque: "Dacia",      modele: "Logan",    year: 2015, kmRaw: 160000, km: "160 000 km", fuel: "GPL",        transmission: "Manuelle",    location: "Blida",         wilaya: "Blida",      priceRaw: 950000,  price: "950 000",   color: "from-gray-300 to-gray-500",    verified: false },
+  { id: 6,  title: "Toyota Yaris",           marque: "Toyota",     modele: "Yaris",    year: 2020, kmRaw: 45000,  km: "45 000 km",  fuel: "Essence",    transmission: "Automatique", location: "Constantine",   wilaya: "Constantine",priceRaw: 2800000, price: "2 800 000", color: "from-red-100 to-red-300",      verified: true,  badge: "Nouveau" },
+  { id: 7,  title: "Kia Picanto",            marque: "Kia",        modele: "Picanto",  year: 2021, kmRaw: 28000,  km: "28 000 km",  fuel: "Essence",    transmission: "Manuelle",    location: "Annaba",        wilaya: "Annaba",     priceRaw: 2200000, price: "2 200 000", color: "from-orange-100 to-orange-300",verified: true  },
+  { id: 8,  title: "Peugeot 301",            marque: "Peugeot",    modele: "301",      year: 2018, kmRaw: 85000,  km: "85 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Sétif",         wilaya: "Sétif",      priceRaw: 1750000, price: "1 750 000", color: "from-sky-100 to-sky-300",      verified: false },
+  { id: 9,  title: "BMW Série 3",            marque: "BMW",        modele: "Série 3",  year: 2019, kmRaw: 60000,  km: "60 000 km",  fuel: "Diesel",     transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 6500000, price: "6 500 000", color: "from-zinc-300 to-zinc-600",    verified: true,  badge: "Premium" },
+  { id: 10, title: "Mercedes Classe C",      marque: "Mercedes",   modele: "Classe C", year: 2020, kmRaw: 40000,  km: "40 000 km",  fuel: "Essence",    transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 9200000, price: "9 200 000", color: "from-neutral-200 to-neutral-500",verified: true, badge: "Premium" },
+  { id: 11, title: "Renault Symbol",         marque: "Renault",    modele: "Symbol",   year: 2016, kmRaw: 130000, km: "130 000 km", fuel: "GPL",        transmission: "Manuelle",    location: "Oran",          wilaya: "Oran",       priceRaw: 1100000, price: "1 100 000", color: "from-yellow-100 to-yellow-300",verified: false },
+  { id: 12, title: "Volkswagen Polo",        marque: "Volkswagen", modele: "Polo",     year: 2017, kmRaw: 95000,  km: "95 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Tlemcen",       wilaya: "Tlemcen",    priceRaw: 1850000, price: "1 850 000", color: "from-blue-200 to-blue-400",    verified: true  },
+  { id: 13, title: "Hyundai Tucson",         marque: "Hyundai",    modele: "Tucson",   year: 2018, kmRaw: 75000,  km: "75 000 km",  fuel: "Diesel",     transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 4200000, price: "4 200 000", color: "from-teal-100 to-teal-300",    verified: true  },
+  { id: 14, title: "Kia Sportage",           marque: "Kia",        modele: "Sportage", year: 2019, kmRaw: 62000,  km: "62 000 km",  fuel: "Diesel",     transmission: "Automatique", location: "Constantine",   wilaya: "Constantine",priceRaw: 4800000, price: "4 800 000", color: "from-green-200 to-green-400",  verified: true,  badge: "SUV" },
+  { id: 15, title: "Dacia Duster",           marque: "Dacia",      modele: "Duster",   year: 2020, kmRaw: 52000,  km: "52 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Béjaïa",        wilaya: "Béjaïa",     priceRaw: 3100000, price: "3 100 000", color: "from-orange-200 to-orange-400",verified: false, badge: "SUV" },
+  { id: 16, title: "Renault Clio 5",         marque: "Renault",    modele: "Clio",     year: 2022, kmRaw: 18000,  km: "18 000 km",  fuel: "Essence",    transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 3400000, price: "3 400 000", color: "from-rose-100 to-rose-300",    verified: true,  badge: "Récent" },
+  { id: 17, title: "Toyota Corolla",         marque: "Toyota",     modele: "Corolla",  year: 2021, kmRaw: 32000,  km: "32 000 km",  fuel: "Hybride",    transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 5100000, price: "5 100 000", color: "from-indigo-100 to-indigo-300", verified: true, badge: "Hybride" },
+  { id: 18, title: "Peugeot 3008",           marque: "Peugeot",    modele: "3008",     year: 2019, kmRaw: 68000,  km: "68 000 km",  fuel: "Diesel",     transmission: "Automatique", location: "Oran",          wilaya: "Oran",       priceRaw: 5500000, price: "5 500 000", color: "from-violet-100 to-violet-300",verified: true,  badge: "SUV" },
+  { id: 19, title: "Seat Ibiza",             marque: "Seat",       modele: "Ibiza",    year: 2018, kmRaw: 88000,  km: "88 000 km",  fuel: "Essence",    transmission: "Manuelle",    location: "Tizi Ouzou",    wilaya: "Tizi Ouzou", priceRaw: 1950000, price: "1 950 000", color: "from-pink-100 to-pink-300",    verified: false },
+  { id: 20, title: "Skoda Octavia",          marque: "Skoda",      modele: "Octavia",  year: 2017, kmRaw: 102000, km: "102 000 km", fuel: "Diesel",     transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 2600000, price: "2 600 000", color: "from-lime-100 to-lime-300",    verified: true  },
+  { id: 21, title: "Opel Astra",             marque: "Opel",       modele: "Astra",    year: 2016, kmRaw: 115000, km: "115 000 km", fuel: "Diesel",     transmission: "Manuelle",    location: "Annaba",        wilaya: "Annaba",     priceRaw: 1650000, price: "1 650 000", color: "from-amber-200 to-amber-400",  verified: false },
+  { id: 22, title: "Ford Focus",             marque: "Ford",       modele: "Focus",    year: 2017, kmRaw: 92000,  km: "92 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Sétif",         wilaya: "Sétif",      priceRaw: 2100000, price: "2 100 000", color: "from-cyan-100 to-cyan-300",    verified: true  },
+  { id: 23, title: "Audi A3",                marque: "Audi",       modele: "A3",       year: 2019, kmRaw: 55000,  km: "55 000 km",  fuel: "Essence",    transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 5800000, price: "5 800 000", color: "from-gray-300 to-gray-600",    verified: true,  badge: "Premium" },
+  { id: 24, title: "Nissan Juke",            marque: "Nissan",     modele: "Juke",     year: 2018, kmRaw: 79000,  km: "79 000 km",  fuel: "Essence",    transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 3200000, price: "3 200 000", color: "from-red-200 to-red-400",      verified: false, badge: "SUV" },
+  { id: 25, title: "Chevrolet Spark",        marque: "Chevrolet",  modele: "Spark",    year: 2015, kmRaw: 148000, km: "148 000 km", fuel: "GPL",        transmission: "Manuelle",    location: "Blida",         wilaya: "Blida",      priceRaw: 850000,  price: "850 000",   color: "from-yellow-200 to-yellow-400",verified: false },
+  { id: 26, title: "Renault Megane 4",       marque: "Renault",    modele: "Megane",   year: 2018, kmRaw: 82000,  km: "82 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Constantine",   wilaya: "Constantine",priceRaw: 2450000, price: "2 450 000", color: "from-sky-200 to-sky-400",      verified: true  },
+  { id: 27, title: "Suzuki Swift",           marque: "Suzuki",     modele: "Swift",    year: 2020, kmRaw: 38000,  km: "38 000 km",  fuel: "Essence",    transmission: "Manuelle",    location: "Oran",          wilaya: "Oran",       priceRaw: 2150000, price: "2 150 000", color: "from-fuchsia-100 to-fuchsia-300",verified: true },
+  { id: 28, title: "Mitsubishi L200",        marque: "Mitsubishi", modele: "L200",     year: 2018, kmRaw: 72000,  km: "72 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Alger",         wilaya: "Alger",      priceRaw: 5200000, price: "5 200 000", color: "from-stone-200 to-stone-500",  verified: true,  badge: "Utilitaire" },
+  { id: 29, title: "Fiat Tipo",              marque: "Fiat",       modele: "Tipo",     year: 2017, kmRaw: 96000,  km: "96 000 km",  fuel: "Diesel",     transmission: "Manuelle",    location: "Béjaïa",        wilaya: "Béjaïa",     priceRaw: 1700000, price: "1 700 000", color: "from-emerald-100 to-emerald-300",verified: false },
+  { id: 30, title: "Volkswagen Tiguan",      marque: "Volkswagen", modele: "Tiguan",   year: 2020, kmRaw: 48000,  km: "48 000 km",  fuel: "Diesel",     transmission: "Automatique", location: "Alger",         wilaya: "Alger",      priceRaw: 6800000, price: "6 800 000", color: "from-slate-200 to-slate-500",  verified: true,  badge: "SUV" },
+];
+
+export const MARQUES = [...new Set(ALL_LISTINGS.map(l => l.marque))].sort();
+export const WILAYAS = [...new Set(ALL_LISTINGS.map(l => l.wilaya))].sort();
+export const FUELS: Listing["fuel"][] = ["Essence", "Diesel", "GPL", "Hybride", "Électrique"];
+export const TRANSMISSIONS: Listing["transmission"][] = ["Manuelle", "Automatique"];

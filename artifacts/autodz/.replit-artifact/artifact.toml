@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AutoDZ — Le marché auto en Algérie"
+version = "1.0.0"
+id = "artifacts/autodz"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21240
+
+[services.development]
+run = "pnpm --filter @workspace/autodz run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/autodz", "run", "build" ]
+publicDir = "artifacts/autodz/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21240"
+BASE_PATH = "/"
