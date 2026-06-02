@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Heart, MessageCircle, MapPin, CheckCircle } from "lucide-react";
-import type { Listing } from "@/data/listings";
+import type { Listing } from "@workspace/api-client-react";
 
 function CarIllustration({ color, title }: { color: string; title: string }) {
   const initials = title.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();

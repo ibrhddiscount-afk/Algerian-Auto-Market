@@ -14,3 +14,91 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+export const ListingSchema = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  marque: zod.string(),
+  modele: zod.string(),
+  year: zod.number(),
+  kmRaw: zod.number(),
+  km: zod.string(),
+  fuel: zod.enum(["Essence", "Diesel", "GPL", "Électrique", "Hybride"]),
+  transmission: zod.enum(["Manuelle", "Automatique"]),
+  location: zod.string(),
+  wilaya: zod.string(),
+  priceRaw: zod.number(),
+  price: zod.string(),
+  color: zod.string(),
+  verified: zod.boolean(),
+  badge: zod.string().optional(),
+});
+
+export const ListingDetailSchema = zod.object({
+  id: zod.number(),
+  description: zod.string(),
+  sellerName: zod.string(),
+  sellerType: zod.enum(["Particulier", "Concessionnaire"]),
+  sellerMember: zod.string(),
+  sellerPhone: zod.string(),
+  sellerWhatsapp: zod.string(),
+  sellerRating: zod.number(),
+  sellerTotalAds: zod.number(),
+  options: zod.array(zod.string()),
+  couleur: zod.string(),
+  portes: zod.number(),
+  places: zod.number(),
+  puissance: zod.number(),
+  cylindree: zod.string(),
+  etat: zod.enum(["Excellent", "Très bon", "Bon", "Passable"]),
+  firstHand: zod.boolean(),
+  dedouane: zod.boolean(),
+  views: zod.number(),
+  postedDaysAgo: zod.number(),
+});
+
+export const ListingFacetsSchema = zod.object({
+  marques: zod.array(zod.string()),
+  wilayas: zod.array(zod.string()),
+  fuels: zod.array(ListingSchema.shape.fuel),
+  transmissions: zod.array(ListingSchema.shape.transmission),
+});
+
+export const ListingsQuerySchema = zod.object({
+  search: zod.string().optional(),
+  marque: zod.string().optional(),
+  wilaya: zod.string().optional(),
+  fuels: zod.string().optional(),
+  transmissions: zod.string().optional(),
+  priceMin: zod.coerce.number().optional(),
+  priceMax: zod.coerce.number().optional(),
+  yearMin: zod.coerce.number().optional(),
+  yearMax: zod.coerce.number().optional(),
+  kmMin: zod.coerce.number().optional(),
+  kmMax: zod.coerce.number().optional(),
+  verifiedOnly: zod
+    .preprocess(
+      (value) =>
+        value === "true" ? true : value === "false" ? false : value,
+      zod.boolean(),
+    )
+    .optional(),
+  sort: zod.enum(["recent", "prix_asc", "prix_desc", "km_asc", "annee_desc"]).optional(),
+  page: zod.coerce.number().int().positive().optional(),
+  pageSize: zod.coerce.number().int().positive().max(50).optional(),
+});
+
+export const ListListingsResponse = zod.object({
+  items: zod.array(ListingSchema),
+  total: zod.number(),
+  page: zod.number(),
+  pageSize: zod.number(),
+  totalPages: zod.number(),
+  facets: ListingFacetsSchema,
+});
+
+export const ListingDetailResponse = zod.object({
+  listing: ListingSchema,
+  detail: ListingDetailSchema,
+  similar: zod.array(ListingSchema),
+});

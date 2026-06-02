@@ -8,3 +8,83 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type ListingFuel =
+  | "Essence"
+  | "Diesel"
+  | "GPL"
+  | "Électrique"
+  | "Hybride";
+
+export type ListingTransmission = "Manuelle" | "Automatique";
+
+export type ListingSort =
+  | "recent"
+  | "prix_asc"
+  | "prix_desc"
+  | "km_asc"
+  | "annee_desc";
+
+export interface Listing {
+  id: number;
+  title: string;
+  marque: string;
+  modele: string;
+  year: number;
+  kmRaw: number;
+  km: string;
+  fuel: ListingFuel;
+  transmission: ListingTransmission;
+  location: string;
+  wilaya: string;
+  priceRaw: number;
+  price: string;
+  color: string;
+  verified: boolean;
+  badge?: string;
+}
+
+export interface ListingDetail {
+  id: number;
+  description: string;
+  sellerName: string;
+  sellerType: "Particulier" | "Concessionnaire";
+  sellerMember: string;
+  sellerPhone: string;
+  sellerWhatsapp: string;
+  sellerRating: number;
+  sellerTotalAds: number;
+  options: string[];
+  couleur: string;
+  portes: number;
+  places: number;
+  puissance: number;
+  cylindree: string;
+  etat: "Excellent" | "Très bon" | "Bon" | "Passable";
+  firstHand: boolean;
+  dedouane: boolean;
+  views: number;
+  postedDaysAgo: number;
+}
+
+export interface ListingFacets {
+  marques: string[];
+  wilayas: string[];
+  fuels: ListingFuel[];
+  transmissions: ListingTransmission[];
+}
+
+export interface ListListingsResponse {
+  items: Listing[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  facets: ListingFacets;
+}
+
+export interface ListingDetailResponse {
+  listing: Listing;
+  detail: ListingDetail;
+  similar: Listing[];
+}
