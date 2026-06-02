@@ -14,6 +14,11 @@ import type {
 } from "@tanstack/react-query";
 
 import type { HealthStatus } from "./api.schemas";
+import type {
+  ListingDetailResponse,
+  ListingSort,
+  ListListingsResponse,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -75,6 +80,216 @@ export type HealthCheckQueryResult = NonNullable<
   Awaited<ReturnType<typeof healthCheck>>
 >;
 export type HealthCheckQueryError = ErrorType<unknown>;
+
+export interface ListListingsParams {
+  search?: string;
+  marque?: string;
+  wilaya?: string;
+  fuels?: string[];
+  transmissions?: string[];
+  priceMin?: number;
+  priceMax?: number;
+  yearMin?: number;
+  yearMax?: number;
+  kmMin?: number;
+  kmMax?: number;
+  verifiedOnly?: boolean;
+  sort?: ListingSort;
+  page?: number;
+  pageSize?: number;
+}
+
+function appendDefinedParam(
+  searchParams: URLSearchParams,
+  key: string,
+  value: string | number | boolean | string[] | undefined,
+) {
+  if (value === undefined || value === "" || value === false) return;
+  searchParams.set(key, Array.isArray(value) ? value.join(",") : String(value));
+}
+
+/**
+ * Returns filtered vehicle listings
+ * @summary List listings
+ */
+export const getListListingsUrl = (params?: ListListingsParams) => {
+  const searchParams = new URLSearchParams();
+
+  appendDefinedParam(searchParams, "search", params?.search);
+  appendDefinedParam(searchParams, "marque", params?.marque);
+  appendDefinedParam(searchParams, "wilaya", params?.wilaya);
+  appendDefinedParam(searchParams, "fuels", params?.fuels);
+  appendDefinedParam(searchParams, "transmissions", params?.transmissions);
+  appendDefinedParam(searchParams, "priceMin", params?.priceMin);
+  appendDefinedParam(searchParams, "priceMax", params?.priceMax);
+  appendDefinedParam(searchParams, "yearMin", params?.yearMin);
+  appendDefinedParam(searchParams, "yearMax", params?.yearMax);
+  appendDefinedParam(searchParams, "kmMin", params?.kmMin);
+  appendDefinedParam(searchParams, "kmMax", params?.kmMax);
+  appendDefinedParam(searchParams, "verifiedOnly", params?.verifiedOnly);
+  appendDefinedParam(searchParams, "sort", params?.sort);
+  appendDefinedParam(searchParams, "page", params?.page);
+  appendDefinedParam(searchParams, "pageSize", params?.pageSize);
+
+  const queryString = searchParams.toString();
+  return queryString ? `/api/listings?${queryString}` : `/api/listings`;
+};
+
+export const listListings = async (
+  params?: ListListingsParams,
+  options?: RequestInit,
+): Promise<ListListingsResponse> => {
+  return customFetch<ListListingsResponse>(getListListingsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListListingsQueryKey = (params?: ListListingsParams) => {
+  return [`/api/listings`, params] as const;
+};
+
+export const getListListingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listListings>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListListingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listListings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListListingsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listListings>>> = ({
+    signal,
+  }) => listListings(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listListings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListListingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listListings>>
+>;
+export type ListListingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List listings
+ */
+export function useListListings<
+  TData = Awaited<ReturnType<typeof listListings>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListListingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listListings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListListingsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns one listing with detail
+ * @summary Get listing
+ */
+export const getGetListingUrl = (id: number) => {
+  return `/api/listings/${id}`;
+};
+
+export const getListing = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ListingDetailResponse> => {
+  return customFetch<ListingDetailResponse>(getGetListingUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetListingQueryKey = (id: number) => {
+  return [`/api/listings/${id}`] as const;
+};
+
+export const getGetListingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getListing>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getListing>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetListingQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getListing>>> = ({
+    signal,
+  }) => getListing(id, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: Number.isFinite(id), ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getListing>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetListingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getListing>>
+>;
+export type GetListingQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get listing
+ */
+export function useGetListing<
+  TData = Awaited<ReturnType<typeof getListing>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getListing>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetListingQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Health check

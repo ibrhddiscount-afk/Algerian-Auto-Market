@@ -1,14 +1,13 @@
 import { useState, useMemo } from "react";
 import { SlidersHorizontal, Search, X, ChevronDown, ChevronUp, LayoutGrid, List, ArrowUpDown, Heart, MessageCircle, MapPin, CheckCircle } from "lucide-react";
-import CarCard from "@/components/CarCard";
 import {
-  ALL_LISTINGS,
-  MARQUES,
-  WILAYAS,
-  FUELS,
-  TRANSMISSIONS,
+  useListListings,
+  type ListListingsParams,
   type Listing,
-} from "@/data/listings";
+  type ListingFacets,
+} from "@workspace/api-client-react";
+import CarCard from "@/components/CarCard";
+import { useLocation } from "wouter";
 
 type SortKey = "recent" | "prix_asc" | "prix_desc" | "km_asc" | "annee_desc";
 
@@ -46,6 +45,13 @@ const KM_RANGES = [
 ];
 
 const PAGE_SIZE = 9;
+
+const DEFAULT_FACETS: ListingFacets = {
+  marques: [],
+  wilayas: [],
+  fuels: ["Essence", "Diesel", "GPL", "Hybride", "Électrique"],
+  transmissions: ["Manuelle", "Automatique"],
+};
 
 interface Filters {
   search: string;
@@ -98,51 +104,42 @@ export default function Listings() {
   const [gridView, setGridView] = useState<"grid" | "list">("grid");
   const [mobileSidebar, setMobileSidebar] = useState(false);
 
+  const listingParams = useMemo<ListListingsParams>(() => {
+    const priceRange = PRICE_RANGES[filters.priceRange];
+    const yearRange = YEAR_RANGES[filters.yearRange];
+    const kmRange = KM_RANGES[filters.kmRange];
+
+    return {
+      search: filters.search || undefined,
+      marque: filters.marque || undefined,
+      wilaya: filters.wilaya || undefined,
+      fuels: filters.fuels.length > 0 ? filters.fuels : undefined,
+      transmissions:
+        filters.transmissions.length > 0 ? filters.transmissions : undefined,
+      priceMin: priceRange.min > 0 ? priceRange.min : undefined,
+      priceMax: Number.isFinite(priceRange.max) ? priceRange.max : undefined,
+      yearMin: yearRange.min > 0 ? yearRange.min : undefined,
+      yearMax: yearRange.max < 9999 ? yearRange.max : undefined,
+      kmMin: kmRange.min > 0 ? kmRange.min : undefined,
+      kmMax: Number.isFinite(kmRange.max) ? kmRange.max : undefined,
+      verifiedOnly: filters.verifiedOnly || undefined,
+      sort,
+      page,
+      pageSize: PAGE_SIZE,
+    };
+  }, [filters, sort, page]);
+
+  const { data, isLoading, isError } = useListListings(listingParams);
+  const facets = data?.facets ?? DEFAULT_FACETS;
+  const paginated = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const currentPage = data?.page ?? page;
+
   const setFilter = <K extends keyof Filters>(key: K, val: Filters[K]) => {
     setFilters(f => ({ ...f, [key]: val }));
     setPage(1);
   };
-
-  const filtered = useMemo(() => {
-    let results = [...ALL_LISTINGS];
-
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      results = results.filter(l =>
-        l.title.toLowerCase().includes(q) ||
-        l.marque.toLowerCase().includes(q) ||
-        l.modele.toLowerCase().includes(q) ||
-        l.location.toLowerCase().includes(q)
-      );
-    }
-    if (filters.marque) results = results.filter(l => l.marque === filters.marque);
-    if (filters.wilaya) results = results.filter(l => l.wilaya === filters.wilaya);
-    if (filters.fuels.length) results = results.filter(l => filters.fuels.includes(l.fuel));
-    if (filters.transmissions.length) results = results.filter(l => filters.transmissions.includes(l.transmission));
-    if (filters.verifiedOnly) results = results.filter(l => l.verified);
-
-    const pr = PRICE_RANGES[filters.priceRange];
-    results = results.filter(l => l.priceRaw >= pr.min && l.priceRaw <= pr.max);
-
-    const yr = YEAR_RANGES[filters.yearRange];
-    results = results.filter(l => l.year >= yr.min && l.year <= yr.max);
-
-    const kr = KM_RANGES[filters.kmRange];
-    results = results.filter(l => l.kmRaw >= kr.min && l.kmRaw <= kr.max);
-
-    switch (sort) {
-      case "prix_asc":   results.sort((a, b) => a.priceRaw - b.priceRaw); break;
-      case "prix_desc":  results.sort((a, b) => b.priceRaw - a.priceRaw); break;
-      case "km_asc":     results.sort((a, b) => a.kmRaw - b.kmRaw); break;
-      case "annee_desc": results.sort((a, b) => b.year - a.year); break;
-      default:           results.sort((a, b) => b.id - a.id);
-    }
-
-    return results;
-  }, [filters, sort]);
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeFilterCount =
     (filters.marque ? 1 : 0) +
@@ -188,7 +185,7 @@ export default function Listings() {
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30 focus:border-[#1a7a3c]"
         >
           <option value="">Toutes les marques</option>
-          {MARQUES.map(m => <option key={m}>{m}</option>)}
+          {facets.marques.map(m => <option key={m}>{m}</option>)}
         </select>
       </FilterSection>
 
@@ -200,14 +197,14 @@ export default function Listings() {
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30 focus:border-[#1a7a3c]"
         >
           <option value="">Toutes les wilayas</option>
-          {WILAYAS.map(w => <option key={w}>{w}</option>)}
+          {facets.wilayas.map(w => <option key={w}>{w}</option>)}
         </select>
       </FilterSection>
 
       {/* Carburant */}
       <FilterSection title="Carburant">
         <div className="space-y-1.5">
-          {FUELS.map(f => (
+          {facets.fuels.map(f => (
             <label key={f} className="flex items-center gap-2 cursor-pointer group">
               <input
                 type="checkbox"
@@ -224,7 +221,7 @@ export default function Listings() {
       {/* Transmission */}
       <FilterSection title="Boîte de vitesses">
         <div className="space-y-1.5">
-          {TRANSMISSIONS.map(t => (
+          {facets.transmissions.map(t => (
             <label key={t} className="flex items-center gap-2 cursor-pointer group">
               <input
                 type="checkbox"
@@ -350,7 +347,7 @@ export default function Listings() {
               </button>
 
               <p className="text-sm text-gray-500">
-                <span className="font-bold text-gray-900">{filtered.length}</span> annonces trouvées
+                <span className="font-bold text-gray-900">{total}</span> annonces trouvées
               </p>
             </div>
 
@@ -418,7 +415,28 @@ export default function Listings() {
           )}
 
           {/* Results grid */}
-          {paginated.length === 0 ? (
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: PAGE_SIZE }, (_, index) => (
+                <div key={index} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-pulse">
+                  <div className="h-44 bg-gray-100" />
+                  <div className="p-3 space-y-2">
+                    <div className="h-4 bg-gray-100 rounded w-2/3" />
+                    <div className="h-3 bg-gray-100 rounded w-1/2" />
+                    <div className="h-5 bg-gray-100 rounded w-full mt-4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <X className="w-7 h-7 text-red-300" />
+              </div>
+              <h3 className="font-bold text-gray-700 text-lg mb-1">Impossible de charger les annonces</h3>
+              <p className="text-sm text-gray-400">Vérifiez que l'API est démarrée puis réessayez.</p>
+            </div>
+          ) : paginated.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                 <Search className="w-7 h-7 text-gray-300" />
@@ -443,7 +461,7 @@ export default function Listings() {
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-8">
               <button
-                disabled={page === 1}
+                disabled={currentPage === 1}
                 onClick={() => setPage(p => p - 1)}
                 className="px-4 py-2 text-sm border border-gray-200 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#1a7a3c] hover:text-[#1a7a3c] transition-colors bg-white"
               >
@@ -456,7 +474,7 @@ export default function Listings() {
                     key={n}
                     onClick={() => setPage(n)}
                     className={`w-9 h-9 text-sm rounded-xl font-medium transition-colors ${
-                      n === page
+                      n === currentPage
                         ? "bg-[#1a7a3c] text-white shadow-sm"
                         : "border border-gray-200 text-gray-600 hover:border-[#1a7a3c] hover:text-[#1a7a3c] bg-white"
                     }`}
@@ -467,7 +485,7 @@ export default function Listings() {
               </div>
 
               <button
-                disabled={page === totalPages}
+                disabled={currentPage === totalPages}
                 onClick={() => setPage(p => p + 1)}
                 className="px-4 py-2 text-sm border border-gray-200 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#1a7a3c] hover:text-[#1a7a3c] transition-colors bg-white"
               >
@@ -479,7 +497,7 @@ export default function Listings() {
           {/* Page info */}
           {totalPages > 1 && (
             <p className="text-center text-xs text-gray-400 mt-2">
-              Page {page} sur {totalPages} · {filtered.length} annonces
+              Page {currentPage} sur {totalPages} · {total} annonces
             </p>
           )}
         </div>
@@ -518,7 +536,7 @@ export default function Listings() {
                 onClick={() => setMobileSidebar(false)}
                 className="flex-1 py-2.5 bg-[#1a7a3c] text-white rounded-xl text-sm font-bold"
               >
-                Voir {filtered.length} annonces
+                Voir {total} annonces
               </button>
             </div>
           </div>
@@ -541,9 +559,13 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
 
 function ListRow({ listing }: { listing: Listing }) {
   const [faved, setFaved] = useState(false);
+  const [, navigate] = useLocation();
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex group cursor-pointer">
+    <div
+      onClick={() => navigate(`/annonces/${listing.id}`)}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex group cursor-pointer"
+    >
       <div className={`w-40 sm:w-52 shrink-0 bg-gradient-to-br ${listing.color} flex items-center justify-center`}>
         <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-70">
           <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />

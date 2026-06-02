@@ -6,8 +6,11 @@ import {
   Gauge, Fuel, Settings, Calendar, Users, DoorOpen, Zap,
   Award, AlertCircle, Car,
 } from "lucide-react";
-import { ALL_LISTINGS } from "@/data/listings";
-import { getDetail } from "@/data/listingDetails";
+import {
+  useGetListing,
+  type Listing,
+  type ListingDetail as ListingDetailData,
+} from "@workspace/api-client-react";
 import CarCard from "@/components/CarCard";
 
 const FUEL_COLORS: Record<string, string> = {
@@ -66,8 +69,10 @@ export default function ListingDetail() {
   const [, navigate] = useLocation();
   const id = parseInt(params.id ?? "1", 10);
 
-  const listing = ALL_LISTINGS.find(l => l.id === id);
-  const detail = getDetail(id);
+  const { data, isLoading, isError } = useGetListing(id);
+  const listing = data?.listing;
+  const detail = data?.detail;
+  const similar = data?.similar ?? [];
 
   const [slide, setSlide] = useState(0);
   const [faved, setFaved] = useState(false);
@@ -75,22 +80,42 @@ export default function ListingDetail() {
   const [copied, setCopied] = useState(false);
   const SLIDES = 5;
 
-  if (!listing) {
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="h-4 w-56 bg-gray-100 rounded mb-5 animate-pulse" />
+        <div className="flex flex-col xl:flex-row gap-6">
+          <div className="flex-1 space-y-5">
+            <div className="h-96 bg-gray-100 rounded-2xl animate-pulse" />
+            <div className="h-52 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+          </div>
+          <div className="w-full xl:w-80 space-y-4">
+            <div className="h-56 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+            <div className="h-28 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !listing || !detail) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
         <Car className="w-16 h-16 text-gray-200 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold text-gray-700 mb-2">Annonce introuvable</h1>
-        <p className="text-gray-400 mb-6">Cette annonce n'existe pas ou a été supprimée.</p>
+        <h1 className="text-2xl font-bold text-gray-700 mb-2">
+          {isError ? "Impossible de charger l'annonce" : "Annonce introuvable"}
+        </h1>
+        <p className="text-gray-400 mb-6">
+          {isError
+            ? "Vérifiez que l'API est démarrée puis réessayez."
+            : "Cette annonce n'existe pas ou a été supprimée."}
+        </p>
         <button onClick={() => navigate("/annonces")} className="bg-[#1a7a3c] text-white px-6 py-2.5 rounded-xl font-semibold text-sm">
           ← Voir toutes les annonces
         </button>
       </div>
     );
   }
-
-  const similar = ALL_LISTINGS
-    .filter(l => l.id !== id && (l.marque === listing.marque || Math.abs(l.priceRaw - listing.priceRaw) < 500000))
-    .slice(0, 4);
 
   function handleShare() {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -406,8 +431,8 @@ export default function ListingDetail() {
 function MobileHeader({
   listing, detail, faved, setFaved, onShare, copied
 }: {
-  listing: ReturnType<typeof ALL_LISTINGS[0]["valueOf"]>;
-  detail: ReturnType<typeof getDetail>;
+  listing: Listing;
+  detail: ListingDetailData;
   faved: boolean;
   setFaved: (v: boolean) => void;
   onShare: () => void;
@@ -440,8 +465,8 @@ function MobileHeader({
 function DesktopHeader({
   listing, detail, faved, setFaved, onShare, copied
 }: {
-  listing: ReturnType<typeof ALL_LISTINGS[0]["valueOf"]>;
-  detail: ReturnType<typeof getDetail>;
+  listing: Listing;
+  detail: ListingDetailData;
   faved: boolean;
   setFaved: (v: boolean) => void;
   onShare: () => void;

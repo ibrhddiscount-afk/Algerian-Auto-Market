@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: listings
+    description: Listing operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,89 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /listings:
+    get:
+      operationId: listListings
+      tags: [listings]
+      summary: List listings
+      description: Returns filtered and paginated vehicle listings
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: marque
+          in: query
+          schema: { type: string }
+        - name: wilaya
+          in: query
+          schema: { type: string }
+        - name: fuels
+          in: query
+          description: Comma-separated fuel values
+          schema: { type: string }
+        - name: transmissions
+          in: query
+          description: Comma-separated transmission values
+          schema: { type: string }
+        - name: priceMin
+          in: query
+          schema: { type: number }
+        - name: priceMax
+          in: query
+          schema: { type: number }
+        - name: yearMin
+          in: query
+          schema: { type: number }
+        - name: yearMax
+          in: query
+          schema: { type: number }
+        - name: kmMin
+          in: query
+          schema: { type: number }
+        - name: kmMax
+          in: query
+          schema: { type: number }
+        - name: verifiedOnly
+          in: query
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recent, prix_asc, prix_desc, km_asc, annee_desc]
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50 }
+      responses:
+        "200":
+          description: Listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListListingsResponse"
+  /listings/{id}:
+    get:
+      operationId: getListing
+      tags: [listings]
+      summary: Get listing
+      description: Returns one listing with seller and vehicle details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Listing detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingDetailResponse"
+        "404":
+          description: Listing not found
 components:
   schemas:
     HealthStatus:
@@ -33,4 +118,138 @@ components:
           type: string
       required:
         - status
-
+    Listing:
+      type: object
+      required:
+        - id
+        - title
+        - marque
+        - modele
+        - year
+        - kmRaw
+        - km
+        - fuel
+        - transmission
+        - location
+        - wilaya
+        - priceRaw
+        - price
+        - color
+        - verified
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        marque: { type: string }
+        modele: { type: string }
+        year: { type: integer }
+        kmRaw: { type: integer }
+        km: { type: string }
+        fuel:
+          type: string
+          enum: [Essence, Diesel, GPL, Électrique, Hybride]
+        transmission:
+          type: string
+          enum: [Manuelle, Automatique]
+        location: { type: string }
+        wilaya: { type: string }
+        priceRaw: { type: integer }
+        price: { type: string }
+        color: { type: string }
+        verified: { type: boolean }
+        badge: { type: string }
+    ListingDetail:
+      type: object
+      required:
+        - id
+        - description
+        - sellerName
+        - sellerType
+        - sellerMember
+        - sellerPhone
+        - sellerWhatsapp
+        - sellerRating
+        - sellerTotalAds
+        - options
+        - couleur
+        - portes
+        - places
+        - puissance
+        - cylindree
+        - etat
+        - firstHand
+        - dedouane
+        - views
+        - postedDaysAgo
+      properties:
+        id: { type: integer }
+        description: { type: string }
+        sellerName: { type: string }
+        sellerType:
+          type: string
+          enum: [Particulier, Concessionnaire]
+        sellerMember: { type: string }
+        sellerPhone: { type: string }
+        sellerWhatsapp: { type: string }
+        sellerRating: { type: number }
+        sellerTotalAds: { type: integer }
+        options:
+          type: array
+          items: { type: string }
+        couleur: { type: string }
+        portes: { type: integer }
+        places: { type: integer }
+        puissance: { type: integer }
+        cylindree: { type: string }
+        etat:
+          type: string
+          enum: [Excellent, Très bon, Bon, Passable]
+        firstHand: { type: boolean }
+        dedouane: { type: boolean }
+        views: { type: integer }
+        postedDaysAgo: { type: integer }
+    ListingFacets:
+      type: object
+      required: [marques, wilayas, fuels, transmissions]
+      properties:
+        marques:
+          type: array
+          items: { type: string }
+        wilayas:
+          type: array
+          items: { type: string }
+        fuels:
+          type: array
+          items:
+            type: string
+            enum: [Essence, Diesel, GPL, Électrique, Hybride]
+        transmissions:
+          type: array
+          items:
+            type: string
+            enum: [Manuelle, Automatique]
+    ListListingsResponse:
+      type: object
+      required: [items, total, page, pageSize, totalPages, facets]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Listing"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+        facets:
+          $ref: "#/components/schemas/ListingFacets"
+    ListingDetailResponse:
+      type: object
+      required: [listing, detail, similar]
+      properties:
+        listing:
+          $ref: "#/components/schemas/Listing"
+        detail:
+          $ref: "#/components/schemas/ListingDetail"
+        similar:
+          type: array
+          items:
+            $ref: "#/components/schemas/Listing"
