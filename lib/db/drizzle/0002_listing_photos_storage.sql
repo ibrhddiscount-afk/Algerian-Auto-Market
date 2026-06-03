@@ -38,4 +38,7 @@ CREATE POLICY listing_photos_authenticated_insert
   ON storage.objects
   FOR INSERT
   TO authenticated
-  WITH CHECK (bucket_id = 'listing-photos');
+  WITH CHECK (
+    bucket_id = 'listing-photos'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );

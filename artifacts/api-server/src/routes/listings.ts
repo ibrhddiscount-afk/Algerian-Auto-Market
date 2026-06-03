@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, or, type SQL } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
@@ -57,6 +58,13 @@ class AuthRequiredError extends Error {
   readonly name = "AuthRequiredError";
 }
 
+function isDevAuthFallbackEnabled() {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_DEV_AUTH_FALLBACK !== "false"
+  );
+}
+
 const LISTING_FUELS = [
   "Essence",
   "Diesel",
@@ -110,6 +118,70 @@ function getRecord(value: unknown) {
     : undefined;
 }
 
+function base64UrlDecode(value: string) {
+  try {
+    return Buffer.from(value, "base64url");
+  } catch {
+    return undefined;
+  }
+}
+
+function getExpectedJwtIssuer() {
+  const explicitIssuer = process.env.SUPABASE_JWT_ISSUER?.trim();
+  if (explicitIssuer) return explicitIssuer;
+
+  const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL)?.trim();
+  if (!supabaseUrl) return undefined;
+
+  return `${supabaseUrl.replace(/\/+$/, "")}/auth/v1`;
+}
+
+function verifySupabaseJwt(token: string) {
+  const jwtSecret = process.env.SUPABASE_JWT_SECRET?.trim();
+
+  if (!jwtSecret) {
+    return process.env.NODE_ENV === "production" ? undefined : decodeJwtPayload(token);
+  }
+
+  const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) return undefined;
+
+  const headerBuffer = base64UrlDecode(encodedHeader);
+  const payloadBuffer = base64UrlDecode(encodedPayload);
+  const signatureBuffer = base64UrlDecode(encodedSignature);
+  if (!headerBuffer || !payloadBuffer || !signatureBuffer) return undefined;
+
+  try {
+    const header = JSON.parse(headerBuffer.toString("utf8")) as Record<string, unknown>;
+    if (header.alg !== "HS256") return undefined;
+
+    const expectedSignature = createHmac("sha256", jwtSecret)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest();
+
+    if (
+      signatureBuffer.length !== expectedSignature.length ||
+      !timingSafeEqual(signatureBuffer, expectedSignature)
+    ) {
+      return undefined;
+    }
+
+    const payload = JSON.parse(payloadBuffer.toString("utf8")) as Record<string, unknown>;
+    const now = Math.floor(Date.now() / 1000);
+    const exp = typeof payload.exp === "number" ? payload.exp : undefined;
+    const nbf = typeof payload.nbf === "number" ? payload.nbf : undefined;
+    const expectedIssuer = getExpectedJwtIssuer();
+
+    if (exp !== undefined && exp <= now) return undefined;
+    if (nbf !== undefined && nbf > now) return undefined;
+    if (expectedIssuer && payload.iss !== expectedIssuer) return undefined;
+
+    return payload;
+  } catch {
+    return undefined;
+  }
+}
+
 function decodeJwtPayload(token: string) {
   const [, payload] = token.split(".");
   if (!payload) return undefined;
@@ -133,7 +205,10 @@ function getBearerToken(req: Request) {
 }
 
 function getAuthIdentity(req: Request): AuthIdentity | undefined {
-  const payload = decodeJwtPayload(getBearerToken(req) ?? "");
+  const token = getBearerToken(req);
+  if (!token) return undefined;
+
+  const payload = verifySupabaseJwt(token);
   if (!payload) return undefined;
 
   const userMetadata = getRecord(payload.user_metadata) ?? {};
@@ -268,7 +343,7 @@ async function resolveRequestUser(req: Request, explicitUserId?: number) {
     if (user) return { user, isDevFallback: false };
   }
 
-  if (process.env.NODE_ENV === "production") {
+  if (!isDevAuthFallbackEnabled()) {
     throw new AuthRequiredError("Authentication required");
   }
 
@@ -299,7 +374,7 @@ async function resolveOptionalRequestUser(req: Request) {
     return { user: await upsertIdentityUser(identity), isDevFallback: false };
   }
 
-  if (process.env.NODE_ENV !== "production") {
+  if (isDevAuthFallbackEnabled()) {
     return { user: await resolveDevFallbackUser(), isDevFallback: true };
   }
 

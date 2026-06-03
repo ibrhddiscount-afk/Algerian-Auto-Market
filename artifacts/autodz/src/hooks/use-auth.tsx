@@ -26,10 +26,17 @@ function readAuthUser() {
   return getAuthUser();
 }
 
+function isDevAuthFallbackEnabled() {
+  return (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_ALLOW_DEV_AUTH_FALLBACK !== "false"
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readAuthUser());
   const isConfigured = isSupabaseAuthConfigured();
-  const isDevFallback = !user && import.meta.env.DEV;
+  const isDevFallback = !user && isDevAuthFallbackEnabled();
 
   const refresh = () => setUser(readAuthUser());
 

@@ -1,4 +1,4 @@
-import { getAuthToken } from "@/lib/auth";
+import { getAuthToken, getAuthUser } from "@/lib/auth";
 import type { CreateListingPhoto } from "@workspace/api-client-react";
 
 const BUCKET_NAME = "listing-photos";
@@ -47,13 +47,21 @@ function sanitizeFileName(fileName: string) {
   return `${baseName || "photo"}.${extension}`;
 }
 
-function createStoragePath(file: File, index: number) {
+function sanitizeStorageFolder(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function createStoragePath(userId: string, file: File, index: number) {
   const randomId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  return `pending/${randomId}-${index}-${sanitizeFileName(file.name)}`;
+  return `${sanitizeStorageFolder(userId)}/${randomId}-${index}-${sanitizeFileName(file.name)}`;
 }
 
 async function parseStorageError(response: Response) {
@@ -88,7 +96,12 @@ export async function uploadListingPhotos(files: File[]): Promise<CreateListingP
     throw new Error("Supabase Storage n'est pas configuré côté frontend.");
   }
 
-  const token = getAuthToken() ?? anonKey;
+  const token = getAuthToken();
+  const user = getAuthUser();
+
+  if (!token || !user?.id) {
+    throw new Error("Connectez-vous pour ajouter des photos à une annonce.");
+  }
 
   const uploadedPhotos: CreateListingPhoto[] = [];
 
@@ -96,7 +109,7 @@ export async function uploadListingPhotos(files: File[]): Promise<CreateListingP
     const validationError = validateListingPhoto(file);
     if (validationError) throw new Error(validationError);
 
-    const storagePath = createStoragePath(file, index);
+    const storagePath = createStoragePath(user.id, file, index);
     const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET_NAME}/${encodeURI(storagePath)}`;
     const response = await fetch(uploadUrl, {
       method: "POST",
