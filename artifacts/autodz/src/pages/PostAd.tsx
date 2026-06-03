@@ -729,7 +729,7 @@ export default function PostAd() {
             <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">
-                En publiant, vous acceptez les <a href="#" className="underline font-semibold">Conditions Générales d'Utilisation</a> d'AutoDZ. 
+                En publiant, vous acceptez les <span aria-disabled="true" className="underline font-semibold text-gray-500 cursor-not-allowed">Conditions Générales d'Utilisation · Bientôt</span> d'AutoDZ. 
                 Votre annonce sera visible gratuitement pendant 30 jours.
               </p>
             </div>

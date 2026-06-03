@@ -16,7 +16,16 @@ function getRedirectPath() {
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
+  const rawMessage = error instanceof Error && error.message ? error.message : "";
+  const normalized = rawMessage.toLowerCase();
+
+  if (normalized.includes("invalid login credentials")) return "Email ou mot de passe incorrect.";
+  if (normalized.includes("email not confirmed")) return "Veuillez confirmer votre email avant de vous connecter.";
+  if (normalized.includes("user already registered") || normalized.includes("already registered")) return "Un compte existe déjà avec cet email.";
+  if (normalized.includes("password should be at least") || normalized.includes("password")) return "Le mot de passe doit contenir au moins 6 caractères.";
+  if (normalized.includes("signup is disabled")) return "L'inscription est désactivée pour le moment.";
+  if (rawMessage) return "Impossible de terminer l'authentification pour le moment.";
+
   return "Impossible de terminer l'authentification pour le moment.";
 }
 

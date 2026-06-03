@@ -4,6 +4,8 @@ import { useLocation } from "wouter";
 import { Heart, User, Plus, Menu, X, ChevronDown, Car, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
+const SOON_NAV_ITEMS = ["Concessionnaires", "Blog", "Contact"];
+
 function initials(nameOrEmail: string) {
   return nameOrEmail
     .split(/[.\s@_-]+/)
@@ -121,9 +123,15 @@ export default function Navbar() {
               Vendre
             </button>
 
-            {["Concessionnaires", "Blog", "Contact"].map(label => (
-              <button key={label} className="text-sm font-medium text-gray-700 hover:text-[#1a7a3c] transition-colors">
-                {label}
+            {SOON_NAV_ITEMS.map(label => (
+              <button
+                key={label}
+                disabled
+                aria-disabled="true"
+                title={`${label} — bientôt disponible`}
+                className="text-sm font-medium text-gray-400 cursor-not-allowed transition-colors"
+              >
+                {label} <span className="text-[10px] uppercase tracking-wide">Bientôt</span>
               </button>
             ))}
           </nav>
@@ -132,6 +140,7 @@ export default function Navbar() {
           <div className="hidden lg:flex items-center gap-4">
             <button
               onClick={() => navigate(isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte")}
+              aria-label="Voir mes favoris"
               className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-[#1a7a3c] transition-colors"
             >
               <Heart className="w-4 h-4" />
@@ -139,6 +148,7 @@ export default function Navbar() {
             </button>
             <button
               onClick={() => navigate(isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte")}
+              aria-label={isAuthenticated || isDevFallback ? `Ouvrir mon compte ${accountLabel}` : "Se connecter"}
               className={`flex items-center gap-1.5 text-sm transition-colors ${isActive("/mon-compte") || isActive("/connexion") ? "text-[#1a7a3c] font-semibold" : "text-gray-700 hover:text-[#1a7a3c]"}`}
             >
               {isAuthenticated ? (
@@ -153,6 +163,7 @@ export default function Navbar() {
             {isAuthenticated && (
               <button
                 onClick={handleSignOut}
+                aria-label="Se déconnecter"
                 className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-500 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -172,6 +183,9 @@ export default function Navbar() {
           <button
             className="lg:hidden p-2 text-gray-600 hover:text-[#1a7a3c]"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-expanded={mobileOpen}
+            title={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -184,9 +198,6 @@ export default function Navbar() {
               ["Accueil",         "/"],
               ["Acheter",         "/annonces"],
               ["Vendre",          "/deposer-annonce"],
-              ["Concessionnaires","#"],
-              ["Blog",            "#"],
-              ["Contact",         "#"],
               ["Favoris",         isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte"],
               [isAuthenticated || isDevFallback ? accountLabel : "Connexion", isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte"],
             ].map(([label, href]) => (
@@ -200,9 +211,21 @@ export default function Navbar() {
                 {label}
               </button>
             ))}
+            {SOON_NAV_ITEMS.map((label) => (
+              <button
+                key={label}
+                disabled
+                aria-disabled="true"
+                title={`${label} — bientôt disponible`}
+                className="block w-full text-left text-sm font-medium py-2 px-1 rounded-lg text-gray-400 cursor-not-allowed"
+              >
+                {label} <span className="text-[10px] uppercase tracking-wide">Bientôt</span>
+              </button>
+            ))}
             {isAuthenticated && (
               <button
                 onClick={() => { void handleSignOut(); setMobileOpen(false); }}
+                aria-label="Se déconnecter"
                 className="block w-full text-left text-sm font-medium py-2 px-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
               >
                 Déconnexion

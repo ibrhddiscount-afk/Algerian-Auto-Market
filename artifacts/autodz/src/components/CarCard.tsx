@@ -79,6 +79,7 @@ export default function CarCard({ listing, size = "md" }: CarCardProps) {
             disabled={isPending}
             aria-pressed={favorited}
             aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+            title={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
             className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 disabled:opacity-60 transition-transform"
           >
             <Heart className={`w-3.5 h-3.5 ${favorited ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
@@ -112,10 +113,14 @@ export default function CarCard({ listing, size = "md" }: CarCardProps) {
           </span>
           <button
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 bg-[#25d366] hover:bg-[#1ebe5e] active:scale-95 text-white text-[10px] font-bold px-2 py-1.5 rounded-lg transition-all shrink-0"
+            aria-label={`Contacter le vendeur de ${listing.title} sur WhatsApp`}
+            title="Contact WhatsApp depuis la liste bientôt disponible"
+            disabled
+            aria-disabled="true"
+            className="flex items-center gap-1 bg-gray-100 text-gray-400 text-[10px] font-bold px-2 py-1.5 rounded-lg shrink-0 cursor-not-allowed"
           >
             <MessageCircle className="w-3 h-3" />
-            WhatsApp
+            WhatsApp · Bientôt
           </button>
         </div>
       </div>

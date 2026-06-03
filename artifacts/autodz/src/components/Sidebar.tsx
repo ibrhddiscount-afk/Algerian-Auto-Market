@@ -16,12 +16,12 @@ export default function Sidebar() {
             </p>
           </div>
         </div>
-        <a
-          href="#"
-          className="inline-block text-xs font-bold border border-white/40 hover:bg-white/10 text-white px-4 py-2 rounded-lg transition-colors"
+        <span
+          aria-disabled="true"
+          className="inline-block text-xs font-bold border border-white/30 text-white/80 px-4 py-2 rounded-lg cursor-not-allowed"
         >
-          En savoir plus
-        </a>
+          En savoir plus · Bientôt
+        </span>
       </div>
 
       {/* Direct contact */}
@@ -57,7 +57,7 @@ export default function Sidebar() {
           </div>
         </div>
         <a
-          href="#"
+          href="/deposer-annonce"
           className="flex items-center justify-center gap-2 w-full bg-[#1a7a3c] hover:bg-[#15632f] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />

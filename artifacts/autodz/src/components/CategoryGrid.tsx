@@ -112,13 +112,13 @@ export default function CategoryGrid() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-bold text-gray-800">Rechercher par type</h2>
-          <a href="#" className="text-sm text-[#1a7a3c] font-medium hover:underline">Voir tout →</a>
+          <a href="/annonces" className="text-sm text-[#1a7a3c] font-medium hover:underline">Voir tout →</a>
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
           {CATEGORIES.map(cat => (
             <a
               key={cat.label}
-              href="#"
+              href="/annonces"
               className="group flex flex-col items-center gap-2 p-3 rounded-xl border border-gray-100 hover:border-[#1a7a3c]/30 hover:bg-[#f0faf4] transition-all cursor-pointer"
             >
               <div className="group-hover:scale-105 transition-transform">

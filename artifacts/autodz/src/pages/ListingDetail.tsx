@@ -158,12 +158,16 @@ export default function ListingDetail() {
               {/* Arrows */}
               <button
                 onClick={() => setSlide(s => (s - 1 + SLIDES) % SLIDES)}
+                aria-label="Afficher la photo précédente"
+                title="Photo précédente"
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/80 hover:bg-white rounded-full shadow flex items-center justify-center transition-all"
               >
                 <ChevronLeft className="w-5 h-5 text-gray-700" />
               </button>
               <button
                 onClick={() => setSlide(s => (s + 1) % SLIDES)}
+                aria-label="Afficher la photo suivante"
+                title="Photo suivante"
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/80 hover:bg-white rounded-full shadow flex items-center justify-center transition-all"
               >
                 <ChevronRight className="w-5 h-5 text-gray-700" />
@@ -196,6 +200,8 @@ export default function ListingDetail() {
                 <button
                   key={i}
                   onClick={() => setSlide(i)}
+                  aria-label={`Afficher la photo ${i + 1}`}
+                  title={`Photo ${i + 1}`}
                   className={`flex-1 h-14 rounded-lg overflow-hidden border-2 transition-all ${
                     slide === i ? "border-[#1a7a3c] shadow-md" : "border-transparent opacity-60 hover:opacity-90"
                   }`}
@@ -383,8 +389,13 @@ export default function ListingDetail() {
               </div>
             </div>
 
-            <button className="w-full border border-gray-200 rounded-xl py-2 text-sm text-gray-600 hover:border-[#1a7a3c] hover:text-[#1a7a3c] transition-colors font-medium">
-              Voir toutes ses annonces
+            <button
+              disabled
+              aria-disabled="true"
+              title="Page vendeur bientôt disponible"
+              className="w-full border border-gray-200 rounded-xl py-2 text-sm text-gray-400 cursor-not-allowed font-medium"
+            >
+              Voir toutes ses annonces · Bientôt
             </button>
           </div>
 
@@ -466,11 +477,17 @@ function MobileHeader({
             disabled={favoritePending}
             aria-pressed={faved}
             aria-label={faved ? "Retirer des favoris" : "Ajouter aux favoris"}
+            title={faved ? "Retirer des favoris" : "Ajouter aux favoris"}
             className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-red-300 disabled:opacity-60 transition-colors"
           >
             <Heart className={`w-4 h-4 ${faved ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
           </button>
-          <button onClick={onShare} className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-[#1a7a3c] transition-colors relative">
+          <button
+            onClick={onShare}
+            aria-label="Partager l'annonce"
+            title="Partager l'annonce"
+            className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-[#1a7a3c] transition-colors relative"
+          >
             <Share2 className="w-4 h-4 text-gray-400" />
             {copied && <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap">Copié !</span>}
           </button>
@@ -511,6 +528,8 @@ function DesktopHeader({
           onClick={() => { void onToggleFavorite(); }}
           disabled={favoritePending}
           aria-pressed={faved}
+          aria-label={faved ? "Retirer des favoris" : "Ajouter aux favoris"}
+          title={faved ? "Retirer des favoris" : "Ajouter aux favoris"}
           className={`flex-1 flex items-center justify-center gap-1.5 border-2 py-2 rounded-xl text-sm font-semibold transition-colors ${
             faved ? "border-red-300 text-red-500 bg-red-50" : "border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-400"
           } disabled:opacity-60`}
@@ -520,6 +539,8 @@ function DesktopHeader({
         </button>
         <button
           onClick={onShare}
+          aria-label="Partager l'annonce"
+          title="Partager l'annonce"
           className="flex-1 flex items-center justify-center gap-1.5 border-2 border-gray-200 text-gray-600 hover:border-[#1a7a3c] hover:text-[#1a7a3c] py-2 rounded-xl text-sm font-semibold transition-colors relative"
         >
           <Share2 className="w-4 h-4" />

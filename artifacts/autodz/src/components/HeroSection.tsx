@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import { useLocation } from "wouter";
 import heroImage from "@assets/ChatGPT_Image_11_mai_2026,_03_32_24_1779320543345.png";
 
 const MARQUES = ["Toutes les marques", "Renault", "Peugeot", "Volkswagen", "Hyundai", "Dacia", "Toyota", "BMW", "Mercedes"];
@@ -7,6 +8,8 @@ const PRIX = ["Prix max", "500 000 DZD", "1 000 000 DZD", "1 500 000 DZD", "2 00
 const WILAYAS = ["Toutes les wilayas", "Alger", "Oran", "Constantine", "Annaba", "Blida", "Sétif", "Béjaïa", "Tizi Ouzou"];
 
 export default function HeroSection() {
+  const [, navigate] = useLocation();
+
   return (
     <section className="relative overflow-hidden bg-gray-900" style={{ minHeight: 380 }}>
       {/* Background image from attached reference — shows cityscape + car */}
@@ -49,7 +52,10 @@ export default function HeroSection() {
                 </div>
               ))}
             </div>
-            <button className="w-full flex items-center justify-center gap-2 bg-[#1a7a3c] hover:bg-[#15632f] text-white font-bold px-6 py-2.5 rounded-xl transition-colors text-sm">
+            <button
+              onClick={() => navigate("/annonces")}
+              className="w-full flex items-center justify-center gap-2 bg-[#1a7a3c] hover:bg-[#15632f] text-white font-bold px-6 py-2.5 rounded-xl transition-colors text-sm"
+            >
               <Search className="w-4 h-4" />
               Rechercher
             </button>

@@ -1,5 +1,37 @@
 import { Car } from "lucide-react";
 
+const FOOTER_COLUMNS = [
+  {
+    title: "Acheteurs",
+    links: [
+      { label: "Voitures neuves", href: "/annonces" },
+      { label: "Voitures d'occasion", href: "/annonces" },
+      { label: "Utilitaires", href: "/annonces" },
+      { label: "Motos" },
+      { label: "Recherche avancée", href: "/annonces" },
+    ],
+  },
+  {
+    title: "Vendeurs",
+    links: [
+      { label: "Déposer une annonce", href: "/deposer-annonce" },
+      { label: "Concessionnaires" },
+      { label: "Conseils de vente" },
+      { label: "Tarifs" },
+    ],
+  },
+  {
+    title: "AutoDZ",
+    links: [
+      { label: "À propos" },
+      { label: "Blog" },
+      { label: "Contact" },
+      { label: "Mentions légales" },
+      { label: "CGU" },
+    ],
+  },
+];
+
 export default function Footer() {
   return (
     <footer className="bg-white border-t border-gray-100 py-10">
@@ -20,17 +52,19 @@ export default function Footer() {
             </p>
           </div>
 
-          {[
-            { title: "Acheteurs", links: ["Voitures neuves", "Voitures d'occasion", "Utilitaires", "Motos", "Recherche avancée"] },
-            { title: "Vendeurs", links: ["Déposer une annonce", "Concessionnaires", "Conseils de vente", "Tarifs"] },
-            { title: "AutoDZ", links: ["À propos", "Blog", "Contact", "Mentions légales", "CGU"] },
-          ].map(col => (
+          {FOOTER_COLUMNS.map(col => (
             <div key={col.title}>
               <h4 className="font-bold text-gray-900 text-sm mb-3">{col.title}</h4>
               <ul className="space-y-2">
                 {col.links.map(link => (
-                  <li key={link}>
-                    <a href="#" className="text-xs text-gray-500 hover:text-[#1a7a3c] transition-colors">{link}</a>
+                  <li key={link.label}>
+                    {link.href ? (
+                      <a href={link.href} className="text-xs text-gray-500 hover:text-[#1a7a3c] transition-colors">{link.label}</a>
+                    ) : (
+                      <span aria-disabled="true" className="text-xs text-gray-400 cursor-not-allowed">
+                        {link.label} <span className="text-[10px] uppercase tracking-wide">Bientôt</span>
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -42,7 +76,9 @@ export default function Footer() {
           <p className="text-xs text-gray-400">© 2026 AutoDZ. Tous droits réservés.</p>
           <div className="flex items-center gap-4">
             {["Facebook", "Instagram", "Twitter", "LinkedIn"].map(s => (
-              <a key={s} href="#" className="text-xs text-gray-400 hover:text-[#1a7a3c] transition-colors">{s}</a>
+              <span key={s} aria-disabled="true" className="text-xs text-gray-400 cursor-not-allowed">
+                {s} <span className="text-[10px]">Bientôt</span>
+              </span>
             ))}
           </div>
         </div>

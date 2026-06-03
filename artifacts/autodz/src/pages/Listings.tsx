@@ -89,6 +89,8 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
       <button
         className="flex items-center justify-between w-full text-left mb-3"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={`${open ? "Masquer" : "Afficher"} le filtre ${title}`}
       >
         <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{title}</span>
         {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
@@ -171,9 +173,10 @@ export default function Listings() {
             className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30 focus:border-[#1a7a3c]"
           />
           {filters.search && (
-            <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setFilter("search", "")}>
-              <X className="w-3.5 h-3.5 text-gray-400" />
-            </button>
+          <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setFilter("search", "")}>
+            <span className="sr-only">Effacer la recherche</span>
+            <X className="w-3.5 h-3.5 text-gray-400" />
+          </button>
           )}
         </div>
       </div>
@@ -347,9 +350,13 @@ export default function Listings() {
                 )}
               </button>
 
-              <p className="text-sm text-gray-500">
-                <span className="font-bold text-gray-900">{total}</span> annonces trouvées
-              </p>
+              {isLoading ? (
+                <p className="text-sm text-gray-500" aria-live="polite">Chargement des annonces…</p>
+              ) : (
+                <p className="text-sm text-gray-500" aria-live="polite">
+                  <span className="font-bold text-gray-900">{total}</span> annonces trouvées
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -371,6 +378,8 @@ export default function Listings() {
                   className={`p-2 transition-colors ${gridView === "grid" ? "bg-[#1a7a3c] text-white" : "text-gray-400 hover:text-gray-700"}`}
                   onClick={() => setGridView("grid")}
                   title="Vue grille"
+                  aria-label="Afficher les annonces en grille"
+                  aria-pressed={gridView === "grid"}
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
@@ -378,6 +387,8 @@ export default function Listings() {
                   className={`p-2 transition-colors ${gridView === "list" ? "bg-[#1a7a3c] text-white" : "text-gray-400 hover:text-gray-700"}`}
                   onClick={() => setGridView("list")}
                   title="Vue liste"
+                  aria-label="Afficher les annonces en liste"
+                  aria-pressed={gridView === "list"}
                 >
                   <List className="w-4 h-4" />
                 </button>
@@ -459,7 +470,7 @@ export default function Listings() {
           )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {!isLoading && totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-8">
               <button
                 disabled={currentPage === 1}
@@ -496,7 +507,7 @@ export default function Listings() {
           )}
 
           {/* Page info */}
-          {totalPages > 1 && (
+          {!isLoading && totalPages > 1 && (
             <p className="text-center text-xs text-gray-400 mt-2">
               Page {currentPage} sur {totalPages} · {total} annonces
             </p>
@@ -517,7 +528,7 @@ export default function Listings() {
                   <span className="bg-[#1a7a3c] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>
                 )}
               </div>
-              <button onClick={() => setMobileSidebar(false)}>
+              <button onClick={() => setMobileSidebar(false)} aria-label="Fermer les filtres" title="Fermer les filtres">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -537,7 +548,7 @@ export default function Listings() {
                 onClick={() => setMobileSidebar(false)}
                 className="flex-1 py-2.5 bg-[#1a7a3c] text-white rounded-xl text-sm font-bold"
               >
-                Voir {total} annonces
+                {isLoading ? "Chargement…" : `Voir ${total} annonces`}
               </button>
             </div>
           </div>
@@ -551,7 +562,7 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <span className="flex items-center gap-1 bg-[#f0faf4] text-[#1a7a3c] border border-[#1a7a3c]/20 text-xs font-semibold px-2.5 py-1 rounded-full">
       {label}
-      <button onClick={onRemove} className="hover:text-red-500 ml-0.5 transition-colors">
+      <button onClick={onRemove} className="hover:text-red-500 ml-0.5 transition-colors" aria-label={`Retirer le filtre ${label}`} title={`Retirer le filtre ${label}`}>
         <X className="w-3 h-3" />
       </button>
     </span>
@@ -601,6 +612,7 @@ function ListRow({ listing }: { listing: Listing }) {
             disabled={isPending}
             aria-pressed={favorited}
             aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+            title={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
             className="disabled:opacity-60"
           >
             <Heart className={`w-4 h-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-300"}`} />
@@ -608,8 +620,15 @@ function ListRow({ listing }: { listing: Listing }) {
         </div>
         <div className="flex items-center justify-between mt-3">
           <span className="text-[#1a7a3c] font-extrabold text-lg">{listing.price} <span className="text-xs font-medium text-gray-400">DZD</span></span>
-          <button onClick={e => e.stopPropagation()} className="flex items-center gap-1.5 bg-[#25d366] hover:bg-[#1ebe5e] text-white text-xs font-bold px-3 py-2 rounded-lg">
-            <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+          <button
+            onClick={e => e.stopPropagation()}
+            disabled
+            aria-disabled="true"
+            className="flex items-center gap-1.5 bg-gray-100 text-gray-400 text-xs font-bold px-3 py-2 rounded-lg cursor-not-allowed"
+            aria-label={`Contact WhatsApp pour ${listing.title} bientôt disponible depuis la liste`}
+            title="Contact WhatsApp depuis la liste bientôt disponible"
+          >
+            <MessageCircle className="w-3.5 h-3.5" /> WhatsApp · Bientôt
           </button>
         </div>
       </div>

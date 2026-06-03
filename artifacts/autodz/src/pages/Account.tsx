@@ -108,8 +108,13 @@ export default function Account() {
 
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            <button className="flex items-center gap-1.5 text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-600 hover:border-[#1a7a3c] hover:text-[#1a7a3c] transition-colors font-medium">
-              <Settings className="w-3.5 h-3.5" /> Modifier le profil
+            <button
+              disabled
+              aria-disabled="true"
+              title="Modification du profil bientôt disponible"
+              className="flex items-center gap-1.5 text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-400 cursor-not-allowed font-medium"
+            >
+              <Settings className="w-3.5 h-3.5" /> Modifier le profil · Bientôt
             </button>
             <button
               onClick={() => navigate("/deposer-annonce")}
@@ -152,6 +157,8 @@ export default function Account() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
+            aria-label={`Afficher ${t.label.toLowerCase()}`}
+            title={t.label}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all relative ${
               tab === t.id
                 ? "bg-[#1a7a3c] text-white shadow-sm"
@@ -193,7 +200,14 @@ export default function Account() {
                   <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center gap-2">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                     <p className="text-xs text-amber-700 font-medium">Cette annonce a expiré. Renouvelez-la pour qu'elle soit à nouveau visible.</p>
-                    <button className="ml-auto text-xs font-bold text-amber-700 underline whitespace-nowrap">Renouveler</button>
+                    <button
+                      disabled
+                      aria-disabled="true"
+                      title="Renouvellement bientôt disponible"
+                      className="ml-auto text-xs font-bold text-amber-600 whitespace-nowrap cursor-not-allowed"
+                    >
+                      Renouveler · Bientôt
+                    </button>
                   </div>
                 )}
 
@@ -250,19 +264,23 @@ export default function Account() {
                               onClick={() => navigate(`/annonces/${listing.id}`)}
                               className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors"
                               title="Voir l'annonce"
+                              aria-label={`Voir l'annonce ${listing.title}`}
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Modifier"
+                              disabled
+                              aria-disabled="true"
+                              className="p-2 text-gray-300 cursor-not-allowed rounded-lg transition-colors"
+                              title="Modification d'annonce bientôt disponible"
+                              aria-label={`Modifier l'annonce ${listing.title} — bientôt disponible`}
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
                           </>
                         )}
                         {ad.status === "expired" && (
-                          <button className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors" title="Renouveler">
+                          <button className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors" title="Renouveler" aria-label={`Renouveler l'annonce ${listing.title}`}>
                             <RefreshCw className="w-4 h-4" />
                           </button>
                         )}
@@ -270,6 +288,7 @@ export default function Account() {
                           onClick={() => setDeletingId(listing.id)}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           title="Supprimer"
+                          aria-label={`Supprimer l'annonce ${listing.title}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -303,8 +322,13 @@ export default function Account() {
                       <Zap className="w-3.5 h-3.5" />
                       <span className="font-semibold">Boostez cette annonce</span> pour être mis en avant et recevoir 3× plus de contacts
                     </p>
-                    <button className="text-xs font-bold text-amber-700 border border-amber-300 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                      Booster
+                    <button
+                      disabled
+                      aria-disabled="true"
+                      title="Boost d'annonce bientôt disponible"
+                      className="text-xs font-bold text-amber-600 border border-amber-200 bg-amber-50/60 px-3 py-1.5 rounded-lg whitespace-nowrap cursor-not-allowed"
+                    >
+                      Booster · Bientôt
                     </button>
                   </div>
                 )}
@@ -362,8 +386,13 @@ export default function Account() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-extrabold text-gray-900">Informations personnelles</h2>
-              <button className="flex items-center gap-1.5 text-xs text-[#1a7a3c] font-semibold border border-[#1a7a3c]/30 hover:bg-[#f0faf4] px-3 py-1.5 rounded-lg transition-colors">
-                <Edit3 className="w-3.5 h-3.5" /> Modifier
+              <button
+                disabled
+                aria-disabled="true"
+                title="Modification du profil bientôt disponible"
+                className="flex items-center gap-1.5 text-xs text-gray-400 font-semibold border border-gray-200 px-3 py-1.5 rounded-lg cursor-not-allowed"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Modifier · Bientôt
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -441,11 +470,21 @@ export default function Account() {
             <h2 className="font-extrabold text-red-600 mb-2 text-sm">Zone sensible</h2>
             <p className="text-xs text-gray-500 mb-4">Ces actions sont irréversibles. Procédez avec prudence.</p>
             <div className="flex gap-3">
-              <button className="flex items-center gap-2 text-xs font-semibold text-gray-600 border border-gray-200 hover:border-red-200 hover:text-red-500 px-4 py-2 rounded-xl transition-colors">
-                <X className="w-3.5 h-3.5" /> Désactiver le compte
+              <button
+                disabled
+                aria-disabled="true"
+                title="Désactivation du compte bientôt disponible"
+                className="flex items-center gap-2 text-xs font-semibold text-gray-400 border border-gray-200 px-4 py-2 rounded-xl cursor-not-allowed"
+              >
+                <X className="w-3.5 h-3.5" /> Désactiver le compte · Bientôt
               </button>
-              <button className="flex items-center gap-2 text-xs font-semibold text-red-500 border border-red-200 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors">
-                <Trash2 className="w-3.5 h-3.5" /> Supprimer le compte
+              <button
+                disabled
+                aria-disabled="true"
+                title="Suppression du compte bientôt disponible"
+                className="flex items-center gap-2 text-xs font-semibold text-gray-400 border border-gray-200 px-4 py-2 rounded-xl cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Supprimer le compte · Bientôt
               </button>
             </div>
           </div>
