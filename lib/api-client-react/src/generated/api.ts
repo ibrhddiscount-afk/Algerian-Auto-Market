@@ -5,16 +5,21 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
 import type { HealthStatus } from "./api.schemas";
 import type {
+  CreateListingRequest,
+  CreateListingResponse,
   ListingDetailResponse,
   ListingSort,
   ListListingsResponse,
@@ -207,6 +212,83 @@ export function useListListings<
   };
 
   return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Creates a vehicle listing
+ * @summary Create listing
+ */
+export const getCreateListingUrl = () => {
+  return `/api/listings`;
+};
+
+export const createListing = async (
+  createListingRequest: CreateListingRequest,
+  options?: RequestInit,
+): Promise<CreateListingResponse> => {
+  return customFetch<CreateListingResponse>(getCreateListingUrl(), {
+    ...options,
+    method: "POST",
+    body: JSON.stringify(createListingRequest),
+  });
+};
+
+export const getCreateListingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createListing>>,
+    TError,
+    CreateListingRequest,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createListing>>,
+    CreateListingRequest
+  > = (createListingRequest) => createListing(createListingRequest, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof createListing>>,
+    TError,
+    CreateListingRequest,
+    TContext
+  >;
+};
+
+export type CreateListingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createListing>>
+>;
+export type CreateListingMutationBody = CreateListingRequest;
+export type CreateListingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create listing
+ */
+export function useCreateListing<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createListing>>,
+    TError,
+    CreateListingRequest,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createListing>>,
+  TError,
+  CreateListingRequest,
+  TContext
+> {
+  const mutationOptions = getCreateListingMutationOptions(options);
+
+  return useMutation(mutationOptions);
 }
 
 /**

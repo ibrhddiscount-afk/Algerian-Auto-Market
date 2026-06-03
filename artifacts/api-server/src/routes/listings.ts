@@ -1,12 +1,15 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, or, type SQL } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
+  CreateListingRequest,
+  CreateListingResponse,
   ListListingsResponse,
   ListingDetailResponse,
   ListingsQuerySchema,
 } from "@workspace/api-zod";
 import {
   db,
+  listingPhotosTable,
   listingsTable,
   usersTable,
 } from "@workspace/db";
@@ -52,6 +55,10 @@ function sellerMemberLabel(createdAt: Date) {
 function daysAgo(createdAt: Date) {
   const elapsed = Date.now() - createdAt.getTime();
   return Math.max(0, Math.floor(elapsed / 86400000));
+}
+
+function isZodValidationError(error: unknown): error is { issues: unknown[] } {
+  return typeof error === "object" && error !== null && "issues" in error;
 }
 
 function buildListingWhere(query: ReturnType<typeof ListingsQuerySchema.parse>) {
@@ -260,6 +267,129 @@ router.get("/listings", async (req, res) => {
   });
 
   res.json(data);
+});
+
+router.post("/listings", async (req, res) => {
+  const parsed = CreateListingRequest.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Données invalides pour créer l'annonce",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const body = parsed.data;
+  const title = `${body.marque} ${body.modele}`.trim();
+
+  const createdListing = await db.transaction(async (tx) => {
+    const userWhere = body.seller.email
+      ? or(
+          eq(usersTable.email, body.seller.email),
+          eq(usersTable.phone, body.seller.phone),
+        )!
+      : eq(usersTable.phone, body.seller.phone);
+
+    const [existingUser] = await tx
+      .select()
+      .from(usersTable)
+      .where(userWhere)
+      .limit(1);
+
+    const userValues = {
+      name: body.seller.name,
+      email: body.seller.email ?? null,
+      phone: body.seller.phone,
+      whatsapp: body.seller.whatsapp ?? body.seller.phone,
+      wilaya: body.seller.wilaya,
+      sellerType: body.seller.sellerType,
+      updatedAt: new Date(),
+    };
+
+    const [seller] = existingUser
+      ? await tx
+          .update(usersTable)
+          .set(userValues)
+          .where(eq(usersTable.id, existingUser.id))
+          .returning()
+      : await tx.insert(usersTable).values(userValues).returning();
+
+    const [listing] = await tx
+      .insert(listingsTable)
+      .values({
+        sellerId: seller.id,
+        title,
+        marque: body.marque,
+        modele: body.modele,
+        year: body.year,
+        kmRaw: body.kmRaw,
+        fuel: body.fuel,
+        transmission: body.transmission,
+        location: body.location,
+        wilaya: body.wilaya,
+        priceRaw: body.priceRaw,
+        color: body.color ?? "from-gray-200 to-gray-400",
+        description: body.description ?? "",
+        couleur: body.couleur ?? "Non précisée",
+        portes: body.portes ?? 5,
+        places: body.places ?? 5,
+        puissance: body.puissance ?? 0,
+        cylindree: body.cylindree ?? "Non précisée",
+        condition: body.condition ?? "Bon",
+        firstHand: body.firstHand ?? false,
+        dedouane: body.dedouane ?? true,
+      })
+      .returning();
+
+    const photoValues = body.photos?.map((photo, position) => ({
+      listingId: listing.id,
+      url: photo.url,
+      alt: photo.alt ?? title,
+      position: photo.position ?? position,
+      isPrimary: photo.isPrimary ?? position === 0,
+    }));
+
+    if (photoValues?.length) {
+      await tx.insert(listingPhotosTable).values(photoValues);
+    }
+
+    return listing;
+  });
+
+  const [listing] = await selectListings()
+    .where(eq(listingsTable.id, createdListing.id))
+    .limit(1);
+
+  if (!listing) {
+    res.status(500).json({ message: "Annonce créée mais introuvable" });
+    return;
+  }
+
+  const [{ total: sellerTotalAds }] = await db
+    .select({ total: count() })
+    .from(listingsTable)
+    .where(eq(listingsTable.sellerId, listing.sellerId));
+
+  try {
+    const data = CreateListingResponse.parse({
+      listing: toApiListing(listing),
+      detail: toApiDetail(listing, sellerTotalAds),
+      similar: [],
+    });
+
+    res.status(201).json(data);
+  } catch (error) {
+    if (isZodValidationError(error)) {
+      res.status(500).json({
+        message: "Annonce créée mais réponse API invalide",
+        issues: error.issues,
+      });
+      return;
+    }
+
+    throw error;
+  }
 });
 
 router.get("/listings/:id", async (req, res) => {

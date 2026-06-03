@@ -88,3 +88,47 @@ export interface ListingDetailResponse {
   detail: ListingDetail;
   similar: Listing[];
 }
+
+export interface CreateListingPhoto {
+  url: string;
+  alt?: string;
+  position?: number;
+  isPrimary?: boolean;
+}
+
+export interface CreateListingSeller {
+  name: string;
+  email?: string;
+  phone: string;
+  whatsapp?: string;
+  wilaya: string;
+  sellerType?: "particulier" | "concessionnaire";
+}
+
+export interface CreateListingRequest {
+  vehicleType?: string;
+  marque: string;
+  modele: string;
+  year: number;
+  kmRaw: number;
+  fuel: ListingFuel;
+  transmission: ListingTransmission;
+  location: string;
+  wilaya: string;
+  priceRaw: number;
+  color?: string;
+  description?: string;
+  couleur?: string;
+  portes?: number;
+  places?: number;
+  puissance?: number;
+  cylindree?: string;
+  condition?: ListingDetail["etat"];
+  firstHand?: boolean;
+  dedouane?: boolean;
+  options?: string[];
+  photos?: CreateListingPhoto[];
+  seller: CreateListingSeller;
+}
+
+export type CreateListingResponse = ListingDetailResponse;

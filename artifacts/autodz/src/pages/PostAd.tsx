@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useCreateListing, type CreateListingRequest } from "@workspace/api-client-react";
 import {
   ChevronRight, ChevronLeft, Check, Car, Truck, Zap,
   Upload, X, Plus, MapPin, Phone, User, Mail,
@@ -34,9 +35,9 @@ const WILAYAS = [
 ].sort();
 
 const CARBURANTS = ["Essence","Diesel","GPL","Hybride","Électrique"];
-const TRANSMISSIONS = ["Manuelle","Automatique","Semi-automatique"];
+const TRANSMISSIONS = ["Manuelle","Automatique"];
 const COULEURS = ["Blanc","Noir","Gris","Argent","Rouge","Bleu","Vert","Jaune","Orange","Marron","Beige","Autre"];
-const ETATS = ["Excellent","Très bon","Bon","Passable","À restaurer"];
+const ETATS = ["Excellent","Très bon","Bon","Passable"];
 const OPTIONS = [
   "Climatisation","Climatisation automatique","GPS / Navigation","Radar de recul",
   "Caméra de recul","Régulateur de vitesse","Toit ouvrant","Toit panoramique",
@@ -144,15 +145,28 @@ function Field({ label, required, children, hint }: { label: string; required?: 
 
 const inputCls = "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30 focus:border-[#1a7a3c] transition-colors placeholder-gray-300";
 const selectCls = `${inputCls} appearance-none cursor-pointer`;
+const DEFAULT_SUBMIT_ERROR = "Impossible de publier l'annonce pour le moment.";
+
+function getSubmitErrorMessage(error: unknown): string {
+  if (error instanceof globalThis.Error && error.message) return error.message;
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  return DEFAULT_SUBMIT_ERROR;
+}
 
 export default function PostAd() {
   const [, navigate] = useLocation();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
-  const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const createListing = useCreateListing();
 
   const set = <K extends keyof FormData>(key: K, val: FormData[K]) =>
     setForm(f => ({ ...f, [key]: val }));
@@ -167,6 +181,8 @@ export default function PostAd() {
     if (s === 1 && !form.vehicleType) e.vehicleType = "Sélectionnez un type de véhicule";
     if (s === 2) {
       if (!form.marque) e.marque = "Requis";
+      if (!form.modele) e.modele = "Requis";
+      if (form.modele === "Autre" && !form.autreModele.trim()) e.autreModele = "Précisez le modèle";
       if (!form.annee) e.annee = "Requis";
       if (!form.km) e.km = "Requis";
       if (!form.carburant) e.carburant = "Requis";
@@ -175,14 +191,15 @@ export default function PostAd() {
     if (s === 5) {
       if (!form.nom.trim()) e.nom = "Requis";
       if (!form.telephone.trim()) e.telephone = "Requis";
+      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalide";
       if (!form.wilaya) e.wilaya = "Requis";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const next = () => { if (validateStep(step)) setStep(s => s + 1); };
-  const prev = () => { setStep(s => s - 1); setErrors({}); };
+  const next = () => { if (validateStep(step)) { setSubmitError(null); setStep(s => s + 1); } };
+  const prev = () => { setStep(s => s - 1); setErrors({}); setSubmitError(null); };
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
@@ -190,13 +207,62 @@ export default function PostAd() {
     set("photos", [...form.photos, ...arr]);
   }, [form.photos]);
 
-  const handleSubmit = () => {
-    if (validateStep(5)) setSubmitted(true);
+  const toOptionalNumber = (value: string) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
 
-  if (submitted) return <SuccessScreen onNavigate={() => navigate("/annonces")} form={form} />;
+  const buildPayload = (): CreateListingRequest => {
+    const modele = form.modele === "Autre" ? form.autreModele.trim() : form.modele;
+    const location = [form.ville.trim(), form.wilaya].filter(Boolean).join(", ");
+
+    return {
+      vehicleType: form.vehicleType,
+      marque: form.marque,
+      modele,
+      year: Number(form.annee),
+      kmRaw: Number(form.km),
+      fuel: form.carburant as CreateListingRequest["fuel"],
+      transmission: form.transmission as CreateListingRequest["transmission"],
+      location,
+      wilaya: form.wilaya,
+      priceRaw: Number(form.prix),
+      description: form.description.trim() || undefined,
+      couleur: form.couleur || undefined,
+      portes: toOptionalNumber(form.portes),
+      places: toOptionalNumber(form.places),
+      puissance: toOptionalNumber(form.puissance),
+      cylindree: form.cylindree.trim() || undefined,
+      condition: form.etat as CreateListingRequest["condition"],
+      firstHand: form.premiereMain,
+      dedouane: form.dedouane,
+      options: form.options,
+      seller: {
+        name: form.nom.trim(),
+        email: form.email.trim() || undefined,
+        phone: form.telephone.trim(),
+        whatsapp: form.telephone.trim(),
+        wilaya: form.wilaya,
+        sellerType: form.sellerType,
+      },
+    };
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep(5)) return;
+
+    setSubmitError(null);
+
+    try {
+      const data = await createListing.mutateAsync(buildPayload());
+      navigate(`/annonces/${data.listing.id}`);
+    } catch (error) {
+      setSubmitError(getSubmitErrorMessage(error));
+    }
+  };
 
   const modeles = form.marque ? (MODELES[form.marque] ?? DEFAULT_MODELES) : DEFAULT_MODELES;
+  const isSubmitting = createListing.isPending;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -246,7 +312,7 @@ export default function PostAd() {
                 </button>
               ))}
             </div>
-            {errors.vehicleType && <Error msg={errors.vehicleType} />}
+            {errors.vehicleType && <FieldError msg={errors.vehicleType} />}
 
             {/* Seller type */}
             <div className="mt-6 pt-6 border-t border-gray-100">
@@ -283,7 +349,7 @@ export default function PostAd() {
                   <option value="">Sélectionner une marque</option>
                   {MARQUES.map(m => <option key={m}>{m}</option>)}
                 </select>
-                {errors.marque && <Error msg={errors.marque} />}
+                {errors.marque && <FieldError msg={errors.marque} />}
               </Field>
 
               <Field label="Modèle" required>
@@ -291,11 +357,13 @@ export default function PostAd() {
                   <option value="">Sélectionner un modèle</option>
                   {modeles.map(m => <option key={m}>{m}</option>)}
                 </select>
+                {errors.modele && <FieldError msg={errors.modele} />}
               </Field>
 
               {form.modele === "Autre" && (
                 <Field label="Préciser le modèle">
                   <input className={inputCls} placeholder="Ex: Scenic, Captur…" value={form.autreModele} onChange={e => set("autreModele", e.target.value)} />
+                  {errors.autreModele && <FieldError msg={errors.autreModele} />}
                 </Field>
               )}
 
@@ -304,7 +372,7 @@ export default function PostAd() {
                   <option value="">Année</option>
                   {Array.from({ length: 35 }, (_, i) => 2024 - i).map(y => <option key={y}>{y}</option>)}
                 </select>
-                {errors.annee && <Error msg={errors.annee} />}
+                {errors.annee && <FieldError msg={errors.annee} />}
               </Field>
 
               <Field label="Kilométrage" required hint="En km, ex: 85000">
@@ -312,7 +380,7 @@ export default function PostAd() {
                   type="number" min="0" className={inputCls} placeholder="85 000"
                   value={form.km} onChange={e => set("km", e.target.value)}
                 />
-                {errors.km && <Error msg={errors.km} />}
+                {errors.km && <FieldError msg={errors.km} />}
               </Field>
 
               <Field label="Carburant" required>
@@ -330,7 +398,7 @@ export default function PostAd() {
                     >{c}</button>
                   ))}
                 </div>
-                {errors.carburant && <Error msg={errors.carburant} />}
+                {errors.carburant && <FieldError msg={errors.carburant} />}
               </Field>
 
               <Field label="Boîte de vitesses">
@@ -410,7 +478,7 @@ export default function PostAd() {
                     ≈ {parseInt(form.prix).toLocaleString("fr-DZ")} DZD
                   </p>
                 )}
-                {errors.prix && <Error msg={errors.prix} />}
+                {errors.prix && <FieldError msg={errors.prix} />}
               </Field>
 
               {/* Négociable */}
@@ -589,7 +657,7 @@ export default function PostAd() {
                     value={form.nom} onChange={e => set("nom", e.target.value)}
                   />
                 </div>
-                {errors.nom && <Error msg={errors.nom} />}
+                {errors.nom && <FieldError msg={errors.nom} />}
               </Field>
 
               <Field label="Numéro de téléphone" required>
@@ -600,7 +668,7 @@ export default function PostAd() {
                     value={form.telephone} onChange={e => set("telephone", e.target.value)}
                   />
                 </div>
-                {errors.telephone && <Error msg={errors.telephone} />}
+                {errors.telephone && <FieldError msg={errors.telephone} />}
               </Field>
 
               <Field label="Email" hint="Optionnel — pour recevoir les messages">
@@ -611,6 +679,7 @@ export default function PostAd() {
                     value={form.email} onChange={e => set("email", e.target.value)}
                   />
                 </div>
+                {errors.email && <FieldError msg={errors.email} />}
               </Field>
 
               <Field label="Wilaya" required>
@@ -624,7 +693,7 @@ export default function PostAd() {
                     {WILAYAS.map(w => <option key={w}>{w}</option>)}
                   </select>
                 </div>
-                {errors.wilaya && <Error msg={errors.wilaya} />}
+                {errors.wilaya && <FieldError msg={errors.wilaya} />}
               </Field>
 
               <div className="sm:col-span-2">
@@ -656,6 +725,13 @@ export default function PostAd() {
                 Votre annonce sera visible gratuitement pendant 30 jours.
               </p>
             </div>
+
+            {submitError && (
+              <div className="mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-red-700">{submitError}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -679,9 +755,10 @@ export default function PostAd() {
           ) : (
             <button
               onClick={handleSubmit}
-              className="flex items-center gap-2 px-8 py-2.5 bg-[#1a7a3c] hover:bg-[#15632f] text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-[#1a7a3c]/30"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-8 py-2.5 bg-[#1a7a3c] hover:bg-[#15632f] disabled:bg-gray-300 disabled:shadow-none text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-[#1a7a3c]/30"
             >
-              <CheckCircle className="w-4 h-4" /> Publier mon annonce
+              <CheckCircle className="w-4 h-4" /> {isSubmitting ? "Publication..." : "Publier mon annonce"}
             </button>
           )}
         </div>
@@ -714,7 +791,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
-function Error({ msg }: { msg: string }) {
+function FieldError({ msg }: { msg: string }) {
   return (
     <p className="flex items-center gap-1 text-xs text-red-500 mt-0.5">
       <AlertCircle className="w-3 h-3" /> {msg}
@@ -727,59 +804,6 @@ function SummaryRow({ label, value, highlight }: { label: string; value: string;
     <div className="flex items-center justify-between">
       <span className="text-xs text-gray-500">{label}</span>
       <span className={`text-xs font-bold ${highlight ? "text-[#1a7a3c] text-sm" : "text-gray-700"}`}>{value}</span>
-    </div>
-  );
-}
-
-function SuccessScreen({ onNavigate, form }: { onNavigate: () => void; form: FormData }) {
-  return (
-    <div className="max-w-lg mx-auto px-4 py-16 text-center">
-      {/* Animated checkmark */}
-      <div className="relative mx-auto w-24 h-24 mb-6">
-        <div className="absolute inset-0 bg-[#1a7a3c]/10 rounded-full animate-ping" />
-        <div className="relative w-24 h-24 bg-[#1a7a3c] rounded-full flex items-center justify-center shadow-xl shadow-[#1a7a3c]/30">
-          <Check className="w-12 h-12 text-white" strokeWidth={3} />
-        </div>
-      </div>
-
-      <h1 className="text-2xl font-extrabold text-gray-900 mb-2">Annonce publiée !</h1>
-      <p className="text-gray-500 mb-6 leading-relaxed">
-        Votre annonce pour{" "}
-        <span className="font-bold text-gray-800">
-          {[form.marque, form.modele, form.annee].filter(Boolean).join(" ")}
-        </span>{" "}
-        a été soumise avec succès et sera visible après vérification.
-      </p>
-
-      {/* Info cards */}
-      <div className="grid grid-cols-3 gap-3 mb-8">
-        {[
-          { icon: <CheckCircle className="w-5 h-5 text-[#1a7a3c]" />, label: "Gratuit", sub: "100%" },
-          { icon: <Star className="w-5 h-5 text-amber-500" />, label: "Visible", sub: "30 jours" },
-          { icon: <Phone className="w-5 h-5 text-blue-500" />, label: "Contacts", sub: "directs" },
-        ].map(c => (
-          <div key={c.label} className="bg-white border border-gray-100 rounded-2xl p-3 shadow-sm flex flex-col items-center gap-1">
-            {c.icon}
-            <p className="font-extrabold text-gray-900 text-base">{c.sub}</p>
-            <p className="text-xs text-gray-400">{c.label}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        <button
-          onClick={onNavigate}
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1a7a3c] hover:bg-[#15632f] text-white rounded-xl font-bold text-sm transition-colors"
-        >
-          Voir les annonces
-        </button>
-        <button
-          onClick={() => window.location.reload()}
-          className="flex items-center justify-center gap-2 px-6 py-3 border-2 border-[#1a7a3c] text-[#1a7a3c] hover:bg-[#f0faf4] rounded-xl font-bold text-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Déposer une autre annonce
-        </button>
-      </div>
     </div>
   );
 }

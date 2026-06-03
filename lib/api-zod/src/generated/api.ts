@@ -7,6 +7,13 @@
  */
 import * as zod from "zod";
 
+const maxListingYear = new Date().getFullYear() + 1;
+
+const OptionalTrimmedString = zod.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  zod.string().trim().min(1).optional(),
+);
+
 /**
  * Returns server health status
  * @summary Health check
@@ -102,3 +109,45 @@ export const ListingDetailResponse = zod.object({
   detail: ListingDetailSchema,
   similar: zod.array(ListingSchema),
 });
+
+export const CreateListingPhotoSchema = zod.object({
+  url: zod.string().url(),
+  alt: OptionalTrimmedString,
+  position: zod.coerce.number().int().min(0).optional(),
+  isPrimary: zod.boolean().optional(),
+});
+
+export const CreateListingRequest = zod.object({
+  vehicleType: OptionalTrimmedString,
+  marque: zod.string().trim().min(1).max(80),
+  modele: zod.string().trim().min(1).max(80),
+  year: zod.coerce.number().int().min(1950).max(maxListingYear),
+  kmRaw: zod.coerce.number().int().min(0).max(2_000_000),
+  fuel: ListingSchema.shape.fuel,
+  transmission: ListingSchema.shape.transmission,
+  location: zod.string().trim().min(1).max(160),
+  wilaya: zod.string().trim().min(1).max(80),
+  priceRaw: zod.coerce.number().int().positive().max(1_000_000_000),
+  color: zod.string().trim().min(1).max(120).optional(),
+  description: zod.string().trim().max(1000).optional(),
+  couleur: OptionalTrimmedString,
+  portes: zod.coerce.number().int().min(2).max(6).optional(),
+  places: zod.coerce.number().int().min(1).max(9).optional(),
+  puissance: zod.coerce.number().int().min(0).max(3000).optional(),
+  cylindree: OptionalTrimmedString,
+  condition: ListingDetailSchema.shape.etat.optional(),
+  firstHand: zod.boolean().optional(),
+  dedouane: zod.boolean().optional(),
+  options: zod.array(zod.string().trim().min(1).max(80)).max(40).optional(),
+  photos: zod.array(CreateListingPhotoSchema).max(10).optional(),
+  seller: zod.object({
+    name: zod.string().trim().min(2).max(160),
+    email: OptionalTrimmedString.pipe(zod.string().email().optional()),
+    phone: zod.string().trim().min(6).max(40),
+    whatsapp: OptionalTrimmedString,
+    wilaya: zod.string().trim().min(1).max(80),
+    sellerType: zod.enum(["particulier", "concessionnaire"]).default("particulier"),
+  }),
+});
+
+export const CreateListingResponse = ListingDetailResponse;
