@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { Heart, MessageCircle, MapPin, CheckCircle } from "lucide-react";
 import type { Listing } from "@workspace/api-client-react";
+import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 
 function CarIllustration({ color, title }: { color: string; title: string }) {
   const initials = title.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -47,8 +47,8 @@ interface CarCardProps {
 }
 
 export default function CarCard({ listing, size = "md" }: CarCardProps) {
-  const [faved, setFaved] = useState(false);
   const [, navigate] = useLocation();
+  const { favorited, isPending, toggleFavorite } = useFavoriteListing(listing.id);
 
   return (
     <div
@@ -75,10 +75,13 @@ export default function CarCard({ listing, size = "md" }: CarCardProps) {
             )}
           </div>
           <button
-            onClick={(e) => { e.stopPropagation(); setFaved(!faved); }}
-            className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 transition-transform"
+            onClick={(e) => { e.stopPropagation(); void toggleFavorite(); }}
+            disabled={isPending}
+            aria-pressed={favorited}
+            aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+            className="w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:scale-110 disabled:opacity-60 transition-transform"
           >
-            <Heart className={`w-3.5 h-3.5 ${faved ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
+            <Heart className={`w-3.5 h-3.5 ${favorited ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
           </button>
         </div>
 

@@ -20,9 +20,13 @@ import type { HealthStatus } from "./api.schemas";
 import type {
   CreateListingRequest,
   CreateListingResponse,
+  FavoriteMutationRequest,
+  FavoriteStateResponse,
+  FavoriteUserParams,
   ListingDetailResponse,
   ListingSort,
   ListListingsResponse,
+  ListFavoritesResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -287,6 +291,268 @@ export function useCreateListing<
   TContext
 > {
   const mutationOptions = getCreateListingMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+/**
+ * Returns favorite listings for a user
+ * @summary List favorites
+ */
+export const getListFavoritesUrl = (params?: FavoriteUserParams) => {
+  const searchParams = new URLSearchParams();
+
+  appendDefinedParam(searchParams, "userId", params?.userId);
+
+  const queryString = searchParams.toString();
+  return queryString ? `/api/favorites?${queryString}` : `/api/favorites`;
+};
+
+export const listFavorites = async (
+  params?: FavoriteUserParams,
+  options?: RequestInit,
+): Promise<ListFavoritesResponse> => {
+  return customFetch<ListFavoritesResponse>(getListFavoritesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFavoritesQueryKey = (params?: FavoriteUserParams) => {
+  return [`/api/favorites`, params] as const;
+};
+
+export const getListFavoritesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFavorites>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: FavoriteUserParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFavorites>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFavoritesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFavorites>>> = ({
+    signal,
+  }) => listFavorites(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFavorites>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFavoritesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFavorites>>
+>;
+export type ListFavoritesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List favorites
+ */
+export function useListFavorites<
+  TData = Awaited<ReturnType<typeof listFavorites>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: FavoriteUserParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFavorites>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFavoritesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export interface AddFavoriteVariables {
+  listingId: number;
+  data?: FavoriteMutationRequest;
+}
+
+export interface RemoveFavoriteVariables {
+  listingId: number;
+  params?: FavoriteUserParams;
+}
+
+/**
+ * Adds a listing to favorites
+ * @summary Add favorite
+ */
+export const getAddFavoriteUrl = (listingId: number) => {
+  return `/api/listings/${listingId}/favorite`;
+};
+
+export const addFavorite = async (
+  listingId: number,
+  favoriteMutationRequest?: FavoriteMutationRequest,
+  options?: RequestInit,
+): Promise<FavoriteStateResponse> => {
+  return customFetch<FavoriteStateResponse>(getAddFavoriteUrl(listingId), {
+    ...options,
+    method: "POST",
+    body: JSON.stringify(favoriteMutationRequest ?? {}),
+  });
+};
+
+export const getAddFavoriteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addFavorite>>,
+    TError,
+    AddFavoriteVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addFavorite>>,
+    AddFavoriteVariables
+  > = ({ listingId, data }) => addFavorite(listingId, data, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof addFavorite>>,
+    TError,
+    AddFavoriteVariables,
+    TContext
+  >;
+};
+
+export type AddFavoriteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addFavorite>>
+>;
+export type AddFavoriteMutationBody = AddFavoriteVariables;
+export type AddFavoriteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add favorite
+ */
+export function useAddFavorite<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addFavorite>>,
+    TError,
+    AddFavoriteVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addFavorite>>,
+  TError,
+  AddFavoriteVariables,
+  TContext
+> {
+  const mutationOptions = getAddFavoriteMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+/**
+ * Removes a listing from favorites
+ * @summary Remove favorite
+ */
+export const getRemoveFavoriteUrl = (
+  listingId: number,
+  params?: FavoriteUserParams,
+) => {
+  const searchParams = new URLSearchParams();
+
+  appendDefinedParam(searchParams, "userId", params?.userId);
+
+  const queryString = searchParams.toString();
+  return queryString
+    ? `/api/listings/${listingId}/favorite?${queryString}`
+    : `/api/listings/${listingId}/favorite`;
+};
+
+export const removeFavorite = async (
+  listingId: number,
+  params?: FavoriteUserParams,
+  options?: RequestInit,
+): Promise<FavoriteStateResponse> => {
+  return customFetch<FavoriteStateResponse>(getRemoveFavoriteUrl(listingId, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveFavoriteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeFavorite>>,
+    TError,
+    RemoveFavoriteVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeFavorite>>,
+    RemoveFavoriteVariables
+  > = ({ listingId, params }) => removeFavorite(listingId, params, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof removeFavorite>>,
+    TError,
+    RemoveFavoriteVariables,
+    TContext
+  >;
+};
+
+export type RemoveFavoriteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeFavorite>>
+>;
+export type RemoveFavoriteMutationBody = RemoveFavoriteVariables;
+export type RemoveFavoriteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove favorite
+ */
+export function useRemoveFavorite<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeFavorite>>,
+    TError,
+    RemoveFavoriteVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeFavorite>>,
+  TError,
+  RemoveFavoriteVariables,
+  TContext
+> {
+  const mutationOptions = getRemoveFavoriteMutationOptions(options);
 
   return useMutation(mutationOptions);
 }

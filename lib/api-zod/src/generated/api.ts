@@ -151,3 +151,23 @@ export const CreateListingRequest = zod.object({
 });
 
 export const CreateListingResponse = ListingDetailResponse;
+
+export const FavoriteUserParamsSchema = zod.object({
+  userId: zod.coerce.number().int().positive().optional(),
+});
+
+export const FavoriteMutationRequest = zod.object({
+  userId: zod.coerce.number().int().positive().optional(),
+}).optional();
+
+export const FavoriteStateResponse = zod.object({
+  userId: zod.number(),
+  listingId: zod.number(),
+  favorited: zod.boolean(),
+});
+
+export const ListFavoritesResponse = zod.object({
+  userId: zod.number(),
+  listingIds: zod.array(zod.number()),
+  items: zod.array(ListingSchema),
+});

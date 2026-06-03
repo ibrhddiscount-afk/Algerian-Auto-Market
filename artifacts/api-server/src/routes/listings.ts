@@ -3,18 +3,24 @@ import { Router, type IRouter } from "express";
 import {
   CreateListingRequest,
   CreateListingResponse,
+  FavoriteMutationRequest,
+  FavoriteStateResponse,
+  FavoriteUserParamsSchema,
   ListListingsResponse,
+  ListFavoritesResponse,
   ListingDetailResponse,
   ListingsQuerySchema,
 } from "@workspace/api-zod";
 import {
   db,
+  favoritesTable,
   listingPhotosTable,
   listingsTable,
   usersTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
+const TEST_USER_EMAIL = "test.user@autodz.local";
 
 type ListingRow = Awaited<ReturnType<typeof selectListings>>[number];
 
@@ -59,6 +65,47 @@ function daysAgo(createdAt: Date) {
 
 function isZodValidationError(error: unknown): error is { issues: unknown[] } {
   return typeof error === "object" && error !== null && "issues" in error;
+}
+
+async function resolveFavoriteUserId(userId?: number) {
+  if (userId) return userId;
+
+  const [existingUser] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, TEST_USER_EMAIL))
+    .limit(1);
+
+  if (existingUser) return existingUser.id;
+
+  const [testUser] = await db
+    .insert(usersTable)
+    .values({
+      name: "Utilisateur Test",
+      email: TEST_USER_EMAIL,
+      phone: "0550 00 00 00",
+      whatsapp: "0550000000",
+      wilaya: "Alger",
+      sellerType: "particulier",
+    })
+    .returning({ id: usersTable.id });
+
+  return testUser.id;
+}
+
+async function ensureListingExists(listingId: number) {
+  const [listing] = await db
+    .select({ id: listingsTable.id })
+    .from(listingsTable)
+    .where(eq(listingsTable.id, listingId))
+    .limit(1);
+
+  return Boolean(listing);
+}
+
+function parseListingId(value: string | undefined) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
 function buildListingWhere(query: ReturnType<typeof ListingsQuerySchema.parse>) {
@@ -269,6 +316,34 @@ router.get("/listings", async (req, res) => {
   res.json(data);
 });
 
+router.get("/favorites", async (req, res) => {
+  const query = FavoriteUserParamsSchema.parse(req.query);
+  const userId = await resolveFavoriteUserId(query.userId);
+
+  const favoriteRows = await db
+    .select({ listingId: favoritesTable.listingId })
+    .from(favoritesTable)
+    .where(eq(favoritesTable.userId, userId))
+    .orderBy(desc(favoritesTable.createdAt));
+
+  const listingIds = favoriteRows.map((favorite) => favorite.listingId);
+  const rows = listingIds.length
+    ? await selectListings().where(inArray(listingsTable.id, listingIds))
+    : [];
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows = listingIds
+    .map((listingId) => rowsById.get(listingId))
+    .filter((row): row is ListingRow => Boolean(row));
+
+  const data = ListFavoritesResponse.parse({
+    userId,
+    listingIds,
+    items: orderedRows.map(toApiListing),
+  });
+
+  res.json(data);
+});
+
 router.post("/listings", async (req, res) => {
   const parsed = CreateListingRequest.safeParse(req.body);
 
@@ -390,6 +465,85 @@ router.post("/listings", async (req, res) => {
 
     throw error;
   }
+});
+
+router.post("/listings/:id/favorite", async (req, res) => {
+  const listingId = parseListingId(req.params.id);
+
+  if (!listingId) {
+    res.status(400).json({ message: "Invalid listing id" });
+    return;
+  }
+
+  if (!(await ensureListingExists(listingId))) {
+    res.status(404).json({ message: "Listing not found" });
+    return;
+  }
+
+  const parsed = FavoriteMutationRequest.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Données invalides pour ajouter le favori",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const userId = await resolveFavoriteUserId(parsed.data?.userId);
+
+  await db
+    .insert(favoritesTable)
+    .values({ userId, listingId })
+    .onConflictDoNothing({
+      target: [favoritesTable.userId, favoritesTable.listingId],
+    });
+
+  const data = FavoriteStateResponse.parse({
+    userId,
+    listingId,
+    favorited: true,
+  });
+
+  res.status(201).json(data);
+});
+
+router.delete("/listings/:id/favorite", async (req, res) => {
+  const listingId = parseListingId(req.params.id);
+
+  if (!listingId) {
+    res.status(400).json({ message: "Invalid listing id" });
+    return;
+  }
+
+  const parsed = FavoriteUserParamsSchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Données invalides pour supprimer le favori",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const userId = await resolveFavoriteUserId(parsed.data.userId);
+
+  await db
+    .delete(favoritesTable)
+    .where(
+      and(
+        eq(favoritesTable.userId, userId),
+        eq(favoritesTable.listingId, listingId),
+      ),
+    );
+
+  const data = FavoriteStateResponse.parse({
+    userId,
+    listingId,
+    favorited: false,
+  });
+
+  res.json(data);
 });
 
 router.get("/listings/:id", async (req, res) => {

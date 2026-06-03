@@ -132,3 +132,23 @@ export interface CreateListingRequest {
 }
 
 export type CreateListingResponse = ListingDetailResponse;
+
+export interface FavoriteUserParams {
+  userId?: number;
+}
+
+export interface FavoriteMutationRequest {
+  userId?: number;
+}
+
+export interface FavoriteStateResponse {
+  userId: number;
+  listingId: number;
+  favorited: boolean;
+}
+
+export interface ListFavoritesResponse {
+  userId: number;
+  listingIds: number[];
+  items: Listing[];
+}

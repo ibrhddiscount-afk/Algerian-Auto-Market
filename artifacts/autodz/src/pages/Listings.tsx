@@ -7,6 +7,7 @@ import {
   type ListingFacets,
 } from "@workspace/api-client-react";
 import CarCard from "@/components/CarCard";
+import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 import { useLocation } from "wouter";
 
 type SortKey = "recent" | "prix_asc" | "prix_desc" | "km_asc" | "annee_desc";
@@ -558,8 +559,8 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
 }
 
 function ListRow({ listing }: { listing: Listing }) {
-  const [faved, setFaved] = useState(false);
   const [, navigate] = useLocation();
+  const { favorited, isPending, toggleFavorite } = useFavoriteListing(listing.id);
 
   return (
     <div
@@ -595,8 +596,14 @@ function ListRow({ listing }: { listing: Listing }) {
               <MapPin className="w-3 h-3 shrink-0" />{listing.location}
             </p>
           </div>
-          <button onClick={(e) => { e.stopPropagation(); setFaved(!faved); }}>
-            <Heart className={`w-4 h-4 ${faved ? "fill-red-500 text-red-500" : "text-gray-300"}`} />
+          <button
+            onClick={(e) => { e.stopPropagation(); void toggleFavorite(); }}
+            disabled={isPending}
+            aria-pressed={favorited}
+            aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+            className="disabled:opacity-60"
+          >
+            <Heart className={`w-4 h-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-300"}`} />
           </button>
         </div>
         <div className="flex items-center justify-between mt-3">

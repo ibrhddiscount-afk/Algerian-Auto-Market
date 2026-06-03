@@ -129,6 +129,71 @@ paths:
                 $ref: "#/components/schemas/ListingDetailResponse"
         "404":
           description: Listing not found
+  /listings/{id}/favorite:
+    post:
+      operationId: addFavorite
+      tags: [listings]
+      summary: Add favorite
+      description: Adds a listing to the current test user's favorites
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteMutationRequest"
+      responses:
+        "201":
+          description: Favorite state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoriteStateResponse"
+        "404":
+          description: Listing not found
+    delete:
+      operationId: removeFavorite
+      tags: [listings]
+      summary: Remove favorite
+      description: Removes a listing from the current test user's favorites
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - name: userId
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Favorite state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoriteStateResponse"
+  /favorites:
+    get:
+      operationId: listFavorites
+      tags: [listings]
+      summary: List favorites
+      description: Returns favorite listings for the current test user
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Favorite listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFavoritesResponse"
 components:
   schemas:
     HealthStatus:
@@ -347,3 +412,30 @@ components:
           $ref: "#/components/schemas/CreateListingSeller"
     CreateListingResponse:
       $ref: "#/components/schemas/ListingDetailResponse"
+    FavoriteUserParams:
+      type: object
+      properties:
+        userId: { type: integer, minimum: 1 }
+    FavoriteMutationRequest:
+      type: object
+      properties:
+        userId: { type: integer, minimum: 1 }
+    FavoriteStateResponse:
+      type: object
+      required: [userId, listingId, favorited]
+      properties:
+        userId: { type: integer }
+        listingId: { type: integer }
+        favorited: { type: boolean }
+    ListFavoritesResponse:
+      type: object
+      required: [userId, listingIds, items]
+      properties:
+        userId: { type: integer }
+        listingIds:
+          type: array
+          items: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Listing"

@@ -12,6 +12,7 @@ import {
   type ListingDetail as ListingDetailData,
 } from "@workspace/api-client-react";
 import CarCard from "@/components/CarCard";
+import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 
 const FUEL_COLORS: Record<string, string> = {
   Essence:    "bg-orange-100 text-orange-700 border-orange-200",
@@ -75,7 +76,7 @@ export default function ListingDetail() {
   const similar = data?.similar ?? [];
 
   const [slide, setSlide] = useState(0);
-  const [faved, setFaved] = useState(false);
+  const { favorited, isPending: favoritePending, toggleFavorite } = useFavoriteListing(id);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const SLIDES = 5;
@@ -207,7 +208,15 @@ export default function ListingDetail() {
 
           {/* Title + meta (mobile) */}
           <div className="xl:hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <MobileHeader listing={listing} detail={detail} faved={faved} setFaved={setFaved} onShare={handleShare} copied={copied} />
+            <MobileHeader
+              listing={listing}
+              detail={detail}
+              faved={favorited}
+              favoritePending={favoritePending}
+              onToggleFavorite={toggleFavorite}
+              onShare={handleShare}
+              copied={copied}
+            />
           </div>
 
           {/* Specs grid */}
@@ -298,7 +307,15 @@ export default function ListingDetail() {
 
           {/* Price card — desktop only */}
           <div className="hidden xl:block bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <DesktopHeader listing={listing} detail={detail} faved={faved} setFaved={setFaved} onShare={handleShare} copied={copied} />
+            <DesktopHeader
+              listing={listing}
+              detail={detail}
+              faved={favorited}
+              favoritePending={favoritePending}
+              onToggleFavorite={toggleFavorite}
+              onShare={handleShare}
+              copied={copied}
+            />
           </div>
 
           {/* CTA buttons */}
@@ -429,12 +446,13 @@ export default function ListingDetail() {
 }
 
 function MobileHeader({
-  listing, detail, faved, setFaved, onShare, copied
+  listing, detail, faved, favoritePending, onToggleFavorite, onShare, copied
 }: {
   listing: Listing;
   detail: ListingDetailData;
   faved: boolean;
-  setFaved: (v: boolean) => void;
+  favoritePending: boolean;
+  onToggleFavorite: () => Promise<void>;
   onShare: () => void;
   copied: boolean;
 }) {
@@ -443,7 +461,13 @@ function MobileHeader({
       <div className="flex items-start justify-between gap-2 mb-3">
         <h1 className="font-extrabold text-gray-900 text-xl leading-tight">{listing.title}</h1>
         <div className="flex gap-2 shrink-0">
-          <button onClick={() => setFaved(!faved)} className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-red-300 transition-colors">
+          <button
+            onClick={() => { void onToggleFavorite(); }}
+            disabled={favoritePending}
+            aria-pressed={faved}
+            aria-label={faved ? "Retirer des favoris" : "Ajouter aux favoris"}
+            className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-red-300 disabled:opacity-60 transition-colors"
+          >
             <Heart className={`w-4 h-4 ${faved ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
           </button>
           <button onClick={onShare} className="w-9 h-9 border border-gray-200 rounded-xl flex items-center justify-center hover:border-[#1a7a3c] transition-colors relative">
@@ -463,12 +487,13 @@ function MobileHeader({
 }
 
 function DesktopHeader({
-  listing, detail, faved, setFaved, onShare, copied
+  listing, detail, faved, favoritePending, onToggleFavorite, onShare, copied
 }: {
   listing: Listing;
   detail: ListingDetailData;
   faved: boolean;
-  setFaved: (v: boolean) => void;
+  favoritePending: boolean;
+  onToggleFavorite: () => Promise<void>;
   onShare: () => void;
   copied: boolean;
 }) {
@@ -483,10 +508,12 @@ function DesktopHeader({
       </p>
       <div className="flex gap-2">
         <button
-          onClick={() => setFaved(!faved)}
+          onClick={() => { void onToggleFavorite(); }}
+          disabled={favoritePending}
+          aria-pressed={faved}
           className={`flex-1 flex items-center justify-center gap-1.5 border-2 py-2 rounded-xl text-sm font-semibold transition-colors ${
             faved ? "border-red-300 text-red-500 bg-red-50" : "border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-400"
-          }`}
+          } disabled:opacity-60`}
         >
           <Heart className={`w-4 h-4 ${faved ? "fill-red-500" : ""}`} />
           {faved ? "Sauvegardé" : "Sauvegarder"}

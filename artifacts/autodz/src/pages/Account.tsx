@@ -6,8 +6,10 @@ import {
   ChevronRight, Phone, Car, AlertCircle, Bell, Settings,
   BarChart2, X, RefreshCw,
 } from "lucide-react";
+import { useListFavorites, type Listing as ApiListing } from "@workspace/api-client-react";
+import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 import {
-  ACCOUNT, MY_ADS, MY_MESSAGES, MY_FAVORITES,
+  ACCOUNT, MY_ADS, MY_MESSAGES,
   getListing, type AdStatus, type MyAd,
 } from "@/data/account";
 
@@ -26,6 +28,8 @@ export default function Account() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [ads, setAds] = useState(MY_ADS);
   const [messages, setMessages] = useState(MY_MESSAGES);
+  const favoritesQuery = useListFavorites();
+  const favoriteListings = favoritesQuery.data?.items ?? [];
 
   const unreadCount = messages.filter(m => !m.read).length;
 
@@ -131,7 +135,7 @@ export default function Account() {
         {([
           { id: "annonces" as Tab, label: "Mes annonces", icon: <Car className="w-4 h-4" />, badge: activeAds },
           { id: "messages" as Tab, label: "Messages",     icon: <MessageCircle className="w-4 h-4" />, badge: unreadCount },
-          { id: "favoris"  as Tab, label: "Favoris",      icon: <Heart className="w-4 h-4" />, badge: MY_FAVORITES.length },
+          { id: "favoris"  as Tab, label: "Favoris",      icon: <Heart className="w-4 h-4" />, badge: favoriteListings.length },
           { id: "profil"   as Tab, label: "Profil",       icon: <User className="w-4 h-4" />,  badge: 0 },
         ]).map(t => (
           <button
@@ -399,49 +403,21 @@ export default function Account() {
       {/* ── FAVORIS ── */}
       {tab === "favoris" && (
         <div>
-          {MY_FAVORITES.length === 0 ? (
+          {favoritesQuery.isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="h-64 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+              ))}
+            </div>
+          ) : favoritesQuery.isError ? (
+            <EmptyState icon={<AlertCircle className="w-8 h-8 text-red-300" />} text="Impossible de charger vos favoris pour le moment." />
+          ) : favoriteListings.length === 0 ? (
             <EmptyState icon={<Heart className="w-8 h-8 text-gray-300" />} text="Vous n'avez pas encore sauvegardé d'annonces." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {MY_FAVORITES.map(fav => {
-                const listing = getListing(fav.listingId);
-                if (!listing) return null;
-                return (
-                  <div
-                    key={fav.listingId}
-                    onClick={() => navigate(`/annonces/${listing.id}`)}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden group cursor-pointer"
-                  >
-                    <div className={`h-36 bg-gradient-to-br ${listing.color} flex items-center justify-center relative`}>
-                      <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
-                        <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
-                        <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
-                        <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-                        <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-                        <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-                        <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-                      </svg>
-                      <button
-                        onClick={e => e.stopPropagation()}
-                        className="absolute top-2.5 right-2.5 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow"
-                      >
-                        <Heart className="w-3.5 h-3.5 fill-red-500 text-red-500" />
-                      </button>
-                      <span className="absolute bottom-2 left-2 text-[10px] bg-white/90 text-gray-600 font-semibold px-2 py-0.5 rounded-full">
-                        {listing.fuel}
-                      </span>
-                    </div>
-                    <div className="p-3">
-                      <h3 className="font-bold text-gray-900 text-sm group-hover:text-[#1a7a3c] transition-colors truncate">{listing.title}</h3>
-                      <p className="text-[11px] text-gray-500 mt-0.5">{listing.year} · {listing.km}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-[#1a7a3c] font-extrabold text-sm">{listing.price} <span className="text-[10px] text-gray-400 font-medium">DZD</span></span>
-                        <span className="text-[10px] text-gray-400">Sauvegardé il y a {fav.savedDaysAgo}j</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {favoriteListings.map((listing) => (
+                <FavoriteAccountCard key={listing.id} listing={listing} onOpen={() => navigate(`/annonces/${listing.id}`)} />
+              ))}
             </div>
           )}
         </div>
@@ -585,6 +561,49 @@ export default function Account() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FavoriteAccountCard({ listing, onOpen }: { listing: ApiListing; onOpen: () => void }) {
+  const { isPending, toggleFavorite } = useFavoriteListing(listing.id);
+
+  return (
+    <div
+      onClick={onOpen}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden group cursor-pointer"
+    >
+      <div className={`h-36 bg-gradient-to-br ${listing.color} flex items-center justify-center relative`}>
+        <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
+          <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
+          <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
+          <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+          <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+          <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+          <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+        </svg>
+        <button
+          onClick={(event) => { event.stopPropagation(); void toggleFavorite(); }}
+          disabled={isPending}
+          aria-label="Retirer des favoris"
+          className="absolute top-2.5 right-2.5 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow disabled:opacity-60"
+        >
+          <Heart className="w-3.5 h-3.5 fill-red-500 text-red-500" />
+        </button>
+        <span className="absolute bottom-2 left-2 text-[10px] bg-white/90 text-gray-600 font-semibold px-2 py-0.5 rounded-full">
+          {listing.fuel}
+        </span>
+      </div>
+      <div className="p-3">
+        <h3 className="font-bold text-gray-900 text-sm group-hover:text-[#1a7a3c] transition-colors truncate">{listing.title}</h3>
+        <p className="text-[11px] text-gray-500 mt-0.5">{listing.year} · {listing.km}</p>
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-[#1a7a3c] font-extrabold text-sm">
+            {listing.price} <span className="text-[10px] text-gray-400 font-medium">DZD</span>
+          </span>
+          <span className="text-[10px] text-gray-400">Sauvegardé</span>
+        </div>
+      </div>
     </div>
   );
 }
