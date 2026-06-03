@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import {
-  User, Star, Shield, Eye, MessageCircle, Heart, TrendingUp,
-  Plus, Edit3, Trash2, Pause, Play, Zap, Clock, CheckCircle,
-  ChevronRight, Phone, Car, AlertCircle, Bell, Settings,
+  User, Star, Eye, MessageCircle, Heart,
+  Plus, Edit3, Trash2, Zap, Clock, CheckCircle,
+  Phone, Car, AlertCircle, Bell, Settings,
   BarChart2, X, RefreshCw,
 } from "lucide-react";
-import { useListFavorites, type Listing as ApiListing } from "@workspace/api-client-react";
-import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 import {
-  ACCOUNT, MY_ADS, MY_MESSAGES,
-  getListing, type AdStatus, type MyAd,
-} from "@/data/account";
+  useGetAccount,
+  useListFavorites,
+  type AccountListing,
+  type Listing as ApiListing,
+} from "@workspace/api-client-react";
+import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 
 type Tab = "annonces" | "messages" | "favoris" | "profil";
+type AdStatus = AccountListing["status"];
 
 const STATUS_CONFIG: Record<AdStatus, { label: string; color: string; dot: string }> = {
   active:  { label: "Active",  color: "bg-green-100 text-green-700",  dot: "bg-green-500"  },
@@ -26,27 +28,31 @@ export default function Account() {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("annonces");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [ads, setAds] = useState(MY_ADS);
-  const [messages, setMessages] = useState(MY_MESSAGES);
+  const accountQuery = useGetAccount();
   const favoritesQuery = useListFavorites();
+  const account = accountQuery.data;
+  const accountListings = account?.listings ?? [];
   const favoriteListings = favoritesQuery.data?.items ?? [];
+  const accountUser = account?.user;
+  const profile = {
+    name: accountUser?.name ?? "Compte AutoDZ",
+    initials: accountUser?.initials ?? "AD",
+    email: accountUser?.email ?? "—",
+    phone: accountUser?.phone ?? "—",
+    wilaya: accountUser?.wilaya ?? "—",
+    sellerType: accountUser?.sellerType ?? "Particulier",
+    memberSince: accountUser?.memberSince ?? "—",
+    rating: accountUser?.rating ?? 0,
+    reviewCount: accountUser?.reviewCount ?? 0,
+    verified: accountUser?.verified ?? false,
+    totalSales: accountUser?.totalSales ?? 0,
+    isDevFallback: accountUser?.isDevFallback ?? false,
+  };
 
-  const unreadCount = messages.filter(m => !m.read).length;
-
-  const togglePause = (id: number) =>
-    setAds(prev => prev.map(a =>
-      a.listingId === id
-        ? { ...a, status: a.status === "active" ? "paused" : "active" }
-        : a
-    ));
-
-  const markRead = (id: number) =>
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
-
-  const activeAds  = ads.filter(a => a.status === "active").length;
-  const totalViews = ads.reduce((s, a) => s + a.views, 0);
-  const totalMsgs  = ads.reduce((s, a) => s + a.messages, 0);
-  const totalFavs  = ads.reduce((s, a) => s + a.favorites, 0);
+  const activeAds  = accountListings.filter(a => a.status === "active").length;
+  const totalViews = accountListings.reduce((s, a) => s + a.views, 0);
+  const totalMsgs  = 0;
+  const totalFavs  = accountListings.reduce((s, a) => s + a.favorites, 0);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
@@ -63,9 +69,9 @@ export default function Account() {
           {/* Avatar */}
           <div className="relative shrink-0">
             <div className="w-16 h-16 bg-[#1a7a3c] rounded-2xl flex items-center justify-center text-white font-extrabold text-2xl shadow-lg shadow-[#1a7a3c]/20">
-              {ACCOUNT.initials}
+              {profile.initials}
             </div>
-            {ACCOUNT.verified && (
+            {profile.verified && (
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#1a7a3c] rounded-full flex items-center justify-center border-2 border-white">
                 <CheckCircle className="w-3 h-3 text-white" />
               </div>
@@ -75,22 +81,27 @@ export default function Account() {
           {/* Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-extrabold text-gray-900 text-xl">{ACCOUNT.name}</h1>
+              <h1 className="font-extrabold text-gray-900 text-xl">{profile.name}</h1>
               <span className="text-xs bg-gray-100 text-gray-500 font-semibold px-2 py-0.5 rounded-full">
-                {ACCOUNT.sellerType}
+                {profile.sellerType}
               </span>
+              {profile.isDevFallback && (
+                <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 font-semibold px-2 py-0.5 rounded-full">
+                  Mode dev
+                </span>
+              )}
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">{ACCOUNT.email}</p>
+            <p className="text-sm text-gray-500 mt-0.5">{profile.email}</p>
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               <span className="flex items-center gap-1 text-xs text-gray-500">
-                <Clock className="w-3 h-3" /> Membre depuis {ACCOUNT.memberSince}
+                <Clock className="w-3 h-3" /> Membre {profile.memberSince}
               </span>
               <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold">
                 <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                {ACCOUNT.rating} ({ACCOUNT.reviewCount} avis)
+                {profile.rating} ({profile.reviewCount} avis)
               </span>
               <span className="flex items-center gap-1 text-xs text-[#1a7a3c] font-semibold">
-                <Car className="w-3 h-3" /> {ACCOUNT.totalSales} vente{ACCOUNT.totalSales > 1 ? "s" : ""}
+                <Car className="w-3 h-3" /> {profile.totalSales} vente{profile.totalSales > 1 ? "s" : ""}
               </span>
             </div>
           </div>
@@ -134,7 +145,7 @@ export default function Account() {
       <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1.5 mb-5">
         {([
           { id: "annonces" as Tab, label: "Mes annonces", icon: <Car className="w-4 h-4" />, badge: activeAds },
-          { id: "messages" as Tab, label: "Messages",     icon: <MessageCircle className="w-4 h-4" />, badge: unreadCount },
+          { id: "messages" as Tab, label: "Messages",     icon: <MessageCircle className="w-4 h-4" />, badge: 0 },
           { id: "favoris"  as Tab, label: "Favoris",      icon: <Heart className="w-4 h-4" />, badge: favoriteListings.length },
           { id: "profil"   as Tab, label: "Profil",       icon: <User className="w-4 h-4" />,  badge: 0 },
         ]).map(t => (
@@ -163,13 +174,21 @@ export default function Account() {
       {/* ── MES ANNONCES ── */}
       {tab === "annonces" && (
         <div className="space-y-3">
-          {ads.map(ad => {
-            const listing = getListing(ad.listingId);
-            if (!listing) return null;
+          {accountQuery.isLoading ? (
+            Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-40 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+            ))
+          ) : accountQuery.isError ? (
+            <EmptyState icon={<AlertCircle className="w-8 h-8 text-red-300" />} text="Impossible de charger vos annonces pour le moment." />
+          ) : accountListings.length === 0 ? (
+            <EmptyState icon={<Car className="w-8 h-8 text-gray-300" />} text="Vous n'avez pas encore déposé d'annonce." />
+          ) : (
+            accountListings.map(ad => {
+            const listing = ad.listing;
             const cfg = STATUS_CONFIG[ad.status];
 
             return (
-              <div key={ad.listingId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={listing.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 {ad.status === "expired" && (
                   <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center gap-2">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -240,17 +259,6 @@ export default function Account() {
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => togglePause(ad.listingId)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                ad.status === "active"
-                                  ? "text-gray-400 hover:text-amber-600 hover:bg-amber-50"
-                                  : "text-amber-600 bg-amber-50 hover:bg-amber-100"
-                              }`}
-                              title={ad.status === "active" ? "Mettre en pause" : "Réactiver"}
-                            >
-                              {ad.status === "active" ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                            </button>
                           </>
                         )}
                         {ad.status === "expired" && (
@@ -259,7 +267,7 @@ export default function Account() {
                           </button>
                         )}
                         <button
-                          onClick={() => setDeletingId(ad.listingId)}
+                          onClick={() => setDeletingId(listing.id)}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           title="Supprimer"
                         >
@@ -271,7 +279,7 @@ export default function Account() {
                     {/* Stats row */}
                     <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50 flex-wrap">
                       <Stat icon={<Eye className="w-3 h-3 text-blue-400" />} value={ad.views.toLocaleString()} label="vues" />
-                      <Stat icon={<MessageCircle className="w-3 h-3 text-green-400" />} value={ad.messages} label="messages" />
+                      <Stat icon={<MessageCircle className="w-3 h-3 text-green-400" />} value={0} label="messages" />
                       <Stat icon={<Heart className="w-3 h-3 text-red-400" />} value={ad.favorites} label="favoris" />
                       {ad.status === "active" && (
                         <span className="text-[10px] text-gray-400 ml-auto flex items-center gap-1">
@@ -302,7 +310,7 @@ export default function Account() {
                 )}
               </div>
             );
-          })}
+          }))}
 
           {/* CTA for new ad */}
           <button
@@ -320,83 +328,7 @@ export default function Account() {
       {/* ── MESSAGES ── */}
       {tab === "messages" && (
         <div className="space-y-2">
-          {messages.length === 0 ? (
-            <EmptyState icon={<MessageCircle className="w-8 h-8 text-gray-300" />} text="Aucun message reçu pour le moment." />
-          ) : (
-            messages.map(msg => {
-              const listing = getListing(msg.listingId);
-              return (
-                <div
-                  key={msg.id}
-                  onClick={() => markRead(msg.id)}
-                  className={`bg-white rounded-2xl border shadow-sm p-4 cursor-pointer transition-all hover:shadow-md ${
-                    !msg.read ? "border-[#1a7a3c]/30 bg-[#f0faf4]/50" : "border-gray-100"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Avatar */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 shadow ${
-                      msg.via === "whatsapp" ? "bg-[#25d366]" : "bg-[#1a7a3c]"
-                    }`}>
-                      {msg.senderName[0]}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className={`text-sm font-bold ${!msg.read ? "text-gray-900" : "text-gray-700"}`}>
-                            {msg.senderName}
-                            {!msg.read && <span className="ml-2 w-1.5 h-1.5 bg-[#1a7a3c] rounded-full inline-block align-middle" />}
-                          </p>
-                          {listing && (
-                            <p className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1">
-                              <Car className="w-3 h-3" /> {listing.title}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                            msg.via === "whatsapp"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}>
-                            {msg.via === "whatsapp" ? "WhatsApp" : "Plateforme"}
-                          </span>
-                          <span className="text-[10px] text-gray-400 whitespace-nowrap">
-                            {msg.receivedHoursAgo < 24
-                              ? `Il y a ${msg.receivedHoursAgo}h`
-                              : `Il y a ${Math.floor(msg.receivedHoursAgo / 24)}j`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <p className={`text-xs mt-1.5 leading-relaxed line-clamp-2 ${!msg.read ? "text-gray-700 font-medium" : "text-gray-500"}`}>
-                        {msg.text}
-                      </p>
-
-                      <div className="flex items-center gap-3 mt-2">
-                        <a
-                          href={`tel:${msg.senderPhone.replace(/\s/g, "")}`}
-                          onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1 text-[10px] font-bold text-[#1a7a3c] border border-[#1a7a3c]/30 hover:bg-[#f0faf4] px-2 py-1 rounded-lg transition-colors"
-                        >
-                          <Phone className="w-3 h-3" /> {msg.senderPhone}
-                        </a>
-                        {listing && (
-                          <button
-                            onClick={e => { e.stopPropagation(); navigate(`/annonces/${listing.id}`); }}
-                            className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 hover:text-[#1a7a3c] transition-colors"
-                          >
-                            Voir l'annonce <ChevronRight className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+          <EmptyState icon={<MessageCircle className="w-8 h-8 text-gray-300" />} text="Aucun message réel disponible pour le moment." />
         </div>
       )}
 
@@ -436,12 +368,12 @@ export default function Account() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
-                { label: "Nom complet",   value: ACCOUNT.name,      icon: <User className="w-4 h-4 text-gray-400" /> },
-                { label: "Email",         value: ACCOUNT.email,     icon: <Bell className="w-4 h-4 text-gray-400" /> },
-                { label: "Téléphone",     value: ACCOUNT.phone,     icon: <Phone className="w-4 h-4 text-gray-400" /> },
-                { label: "Wilaya",        value: ACCOUNT.wilaya,    icon: <Car className="w-4 h-4 text-gray-400" /> },
-                { label: "Type de compte",value: ACCOUNT.sellerType,icon: <User className="w-4 h-4 text-gray-400" /> },
-                { label: "Membre depuis", value: ACCOUNT.memberSince,icon:<Clock className="w-4 h-4 text-gray-400" /> },
+                { label: "Nom complet",   value: profile.name,        icon: <User className="w-4 h-4 text-gray-400" /> },
+                { label: "Email",         value: profile.email,       icon: <Bell className="w-4 h-4 text-gray-400" /> },
+                { label: "Téléphone",     value: profile.phone,       icon: <Phone className="w-4 h-4 text-gray-400" /> },
+                { label: "Wilaya",        value: profile.wilaya,      icon: <Car className="w-4 h-4 text-gray-400" /> },
+                { label: "Type de compte",value: profile.sellerType,  icon: <User className="w-4 h-4 text-gray-400" /> },
+                { label: "Membre depuis", value: profile.memberSince, icon:<Clock className="w-4 h-4 text-gray-400" /> },
               ].map(field => (
                 <div key={field.label} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className="mt-0.5">{field.icon}</div>
@@ -459,28 +391,21 @@ export default function Account() {
             <h2 className="font-extrabold text-gray-900 mb-4">Réputation & Avis</h2>
             <div className="flex items-center gap-6 mb-4">
               <div className="text-center">
-                <p className="text-4xl font-extrabold text-gray-900">{ACCOUNT.rating}</p>
+                <p className="text-4xl font-extrabold text-gray-900">{profile.rating}</p>
                 <div className="flex justify-center gap-0.5 my-1">
                   {[1,2,3,4,5].map(i => (
-                    <Star key={i} className={`w-4 h-4 ${i <= Math.round(ACCOUNT.rating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />
+                    <Star key={i} className={`w-4 h-4 ${i <= Math.round(profile.rating) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`} />
                   ))}
                 </div>
-                <p className="text-xs text-gray-400">{ACCOUNT.reviewCount} avis</p>
+                <p className="text-xs text-gray-400">{profile.reviewCount} avis</p>
               </div>
-              <div className="flex-1 space-y-1.5">
-                {[5,4,3,2,1].map(star => (
-                  <div key={star} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-3">{star}</span>
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-400 rounded-full"
-                        style={{ width: `${[70, 20, 7, 2, 1][5 - star]}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-400 w-6">{[70, 20, 7, 2, 1][5 - star]}%</span>
-                  </div>
-                ))}
+              <div className="flex-1 rounded-xl bg-gray-50 p-4">
+                <p className="text-xs font-semibold text-gray-500">
+                  La note et le nombre d'avis viennent du profil réel.
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  La répartition détaillée des avis sera affichée dès qu'elle sera exposée par l'API.
+                </p>
               </div>
             </div>
           </div>
@@ -493,10 +418,10 @@ export default function Account() {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Vues ce mois",   value: "2 684", trend: "+12%",  positive: true },
-                { label: "Contacts reçus", value: "25",    trend: "+3",    positive: true },
-                { label: "Taux de réponse",value: "92%",   trend: "",      positive: true },
-                { label: "Ventes réalisées",value: "3",    trend: "",      positive: true },
+                { label: "Vues totales", value: totalViews.toLocaleString("fr-DZ"), trend: "", positive: true },
+                { label: "Contacts reçus", value: totalMsgs, trend: "", positive: true },
+                { label: "Favoris reçus", value: totalFavs, trend: "", positive: true },
+                { label: "Ventes réalisées", value: profile.totalSales, trend: "", positive: true },
               ].map(m => (
                 <div key={m.label} className="bg-gray-50 rounded-xl p-3 text-center">
                   <p className="text-xl font-extrabold text-gray-900">{m.value}</p>
@@ -549,10 +474,7 @@ export default function Account() {
                 Annuler
               </button>
               <button
-                onClick={() => {
-                  setAds(prev => prev.filter(a => a.listingId !== deletingId));
-                  setDeletingId(null);
-                }}
+                onClick={() => setDeletingId(null)}
                 className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-colors"
               >
                 Supprimer

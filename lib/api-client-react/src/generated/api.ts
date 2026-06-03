@@ -18,6 +18,7 @@ import type {
 
 import type { HealthStatus } from "./api.schemas";
 import type {
+  AccountResponse,
   CreateListingRequest,
   CreateListingResponse,
   FavoriteMutationRequest,
@@ -89,6 +90,81 @@ export type HealthCheckQueryResult = NonNullable<
   Awaited<ReturnType<typeof healthCheck>>
 >;
 export type HealthCheckQueryError = ErrorType<unknown>;
+
+/**
+ * Returns current account profile and listings
+ * @summary Get account
+ */
+export const getGetAccountUrl = () => {
+  return `/api/account`;
+};
+
+export const getAccount = async (
+  options?: RequestInit,
+): Promise<AccountResponse> => {
+  return customFetch<AccountResponse>(getGetAccountUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAccountQueryKey = () => {
+  return [`/api/account`] as const;
+};
+
+export const getGetAccountQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAccount>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccount>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAccountQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccount>>> = ({
+    signal,
+  }) => getAccount({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAccount>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAccountQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAccount>>
+>;
+export type GetAccountQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get account
+ */
+export function useGetAccount<
+  TData = Awaited<ReturnType<typeof getAccount>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccount>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAccountQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export interface ListListingsParams {
   search?: string;

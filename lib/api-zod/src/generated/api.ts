@@ -171,3 +171,36 @@ export const ListFavoritesResponse = zod.object({
   listingIds: zod.array(zod.number()),
   items: zod.array(ListingSchema),
 });
+
+export const AccountUserSchema = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  initials: zod.string(),
+  email: zod.string().nullable(),
+  phone: zod.string(),
+  whatsapp: zod.string().nullable(),
+  wilaya: zod.string(),
+  sellerType: zod.enum(["Particulier", "Concessionnaire"]),
+  rating: zod.number(),
+  reviewCount: zod.number(),
+  verified: zod.boolean(),
+  totalSales: zod.number(),
+  memberSince: zod.string(),
+  isDevFallback: zod.boolean(),
+});
+
+export const AccountListingSchema = zod.object({
+  listing: ListingSchema,
+  status: zod.enum(["active", "paused", "expired", "sold"]),
+  views: zod.number(),
+  favorites: zod.number(),
+  postedDaysAgo: zod.number(),
+  expiresInDays: zod.number(),
+  boosted: zod.boolean(),
+});
+
+export const AccountResponse = zod.object({
+  user: AccountUserSchema,
+  listings: zod.array(AccountListingSchema),
+  favorites: zod.array(ListingSchema),
+});

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCreateListing, type CreateListingRequest } from "@workspace/api-client-react";
 import {
   ChevronRight, ChevronLeft, Check, Car, Truck, Zap,
@@ -160,6 +161,7 @@ function getSubmitErrorMessage(error: unknown): string {
 
 export default function PostAd() {
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -255,6 +257,12 @@ export default function PostAd() {
 
     try {
       const data = await createListing.mutateAsync(buildPayload());
+      queryClient.setQueryData([`/api/listings/${data.listing.id}`], data);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/account"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/listings"] }),
+        queryClient.invalidateQueries({ queryKey: [`/api/listings/${data.listing.id}`] }),
+      ]);
       navigate(`/annonces/${data.listing.id}`);
     } catch (error) {
       setSubmitError(getSubmitErrorMessage(error));

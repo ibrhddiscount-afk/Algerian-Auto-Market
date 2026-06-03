@@ -152,3 +152,36 @@ export interface ListFavoritesResponse {
   listingIds: number[];
   items: Listing[];
 }
+
+export interface AccountUser {
+  id: number;
+  name: string;
+  initials: string;
+  email: string | null;
+  phone: string;
+  whatsapp: string | null;
+  wilaya: string;
+  sellerType: "Particulier" | "Concessionnaire";
+  rating: number;
+  reviewCount: number;
+  verified: boolean;
+  totalSales: number;
+  memberSince: string;
+  isDevFallback: boolean;
+}
+
+export interface AccountListing {
+  listing: Listing;
+  status: "active" | "paused" | "expired" | "sold";
+  views: number;
+  favorites: number;
+  postedDaysAgo: number;
+  expiresInDays: number;
+  boosted: boolean;
+}
+
+export interface AccountResponse {
+  user: AccountUser;
+  listings: AccountListing[];
+  favorites: Listing[];
+}

@@ -26,6 +26,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /account:
+    get:
+      operationId: getAccount
+      tags: [listings]
+      summary: Get account
+      description: Returns the current account profile, listings and favorites
+      responses:
+        "200":
+          description: Account profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
   /listings:
     get:
       operationId: listListings
@@ -436,6 +449,74 @@ components:
           type: array
           items: { type: integer }
         items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Listing"
+    AccountUser:
+      type: object
+      required:
+        - id
+        - name
+        - initials
+        - email
+        - phone
+        - whatsapp
+        - wilaya
+        - sellerType
+        - rating
+        - reviewCount
+        - verified
+        - totalSales
+        - memberSince
+        - isDevFallback
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        initials: { type: string }
+        email:
+          type:
+            - string
+            - "null"
+        phone: { type: string }
+        whatsapp:
+          type:
+            - string
+            - "null"
+        wilaya: { type: string }
+        sellerType:
+          type: string
+          enum: [Particulier, Concessionnaire]
+        rating: { type: number }
+        reviewCount: { type: integer }
+        verified: { type: boolean }
+        totalSales: { type: integer }
+        memberSince: { type: string }
+        isDevFallback: { type: boolean }
+    AccountListing:
+      type: object
+      required: [listing, status, views, favorites, postedDaysAgo, expiresInDays, boosted]
+      properties:
+        listing:
+          $ref: "#/components/schemas/Listing"
+        status:
+          type: string
+          enum: [active, paused, expired, sold]
+        views: { type: integer }
+        favorites: { type: integer }
+        postedDaysAgo: { type: integer }
+        expiresInDays: { type: integer }
+        boosted: { type: boolean }
+    AccountResponse:
+      type: object
+      required: [user, listings, favorites]
+      properties:
+        user:
+          $ref: "#/components/schemas/AccountUser"
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountListing"
+        favorites:
           type: array
           items:
             $ref: "#/components/schemas/Listing"

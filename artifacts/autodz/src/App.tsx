@@ -10,8 +10,10 @@ import ListingDetail from "@/pages/ListingDetail";
 import PostAd from "@/pages/PostAd";
 import Account from "@/pages/Account";
 import NotFound from "@/pages/not-found";
+import { configureApiAuth } from "@/lib/auth";
 
 const queryClient = new QueryClient();
+configureApiAuth();
 
 function Router() {
   return (

@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, or, type SQL } from "drizzle-orm";
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import {
+  AccountResponse,
   CreateListingRequest,
   CreateListingResponse,
   FavoriteMutationRequest,
@@ -20,9 +21,18 @@ import {
 } from "@workspace/db";
 
 const router: IRouter = Router();
-const TEST_USER_EMAIL = "test.user@autodz.local";
+const DEV_FALLBACK_EMAIL = "dev.user@autodz.local";
 
 type ListingRow = Awaited<ReturnType<typeof selectListings>>[number];
+type UserRow = typeof usersTable.$inferSelect;
+
+interface AuthIdentity {
+  sub?: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  wilaya?: string;
+}
 
 const LISTING_FUELS = [
   "Essence",
@@ -67,30 +77,180 @@ function isZodValidationError(error: unknown): error is { issues: unknown[] } {
   return typeof error === "object" && error !== null && "issues" in error;
 }
 
-async function resolveFavoriteUserId(userId?: number) {
-  if (userId) return userId;
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
 
-  const [existingUser] = await db
-    .select({ id: usersTable.id })
+function getRecord(value: unknown) {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function decodeJwtPayload(token: string) {
+  const [, payload] = token.split(".");
+  if (!payload) return undefined;
+
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function getBearerToken(req: Request) {
+  const authorization = req.header("authorization");
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1];
+}
+
+function getAuthIdentity(req: Request): AuthIdentity | undefined {
+  const payload = decodeJwtPayload(getBearerToken(req) ?? "");
+  if (!payload) return undefined;
+
+  const userMetadata = getRecord(payload.user_metadata) ?? {};
+  const appMetadata = getRecord(payload.app_metadata) ?? {};
+
+  return {
+    sub: getString(payload.sub),
+    email: getString(payload.email),
+    name:
+      getString(userMetadata.full_name) ??
+      getString(userMetadata.name) ??
+      getString(payload.name),
+    phone:
+      getString(userMetadata.phone) ??
+      getString(payload.phone) ??
+      getString(appMetadata.phone),
+    wilaya: getString(userMetadata.wilaya),
+  };
+}
+
+function initials(name: string) {
+  const letters = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return letters || "AD";
+}
+
+function accountSellerTypeLabel(value: "particulier" | "concessionnaire") {
+  return value === "concessionnaire" ? "Concessionnaire" : "Particulier";
+}
+
+function resolveIdentityEmail(identity: AuthIdentity) {
+  return identity.email ?? (identity.sub ? `supabase-${identity.sub}@autodz.local` : undefined);
+}
+
+async function findUserById(userId: number) {
+  const [user] = await db
+    .select()
     .from(usersTable)
-    .where(eq(usersTable.email, TEST_USER_EMAIL))
+    .where(eq(usersTable.id, userId))
     .limit(1);
 
-  if (existingUser) return existingUser.id;
+  return user;
+}
 
-  const [testUser] = await db
+async function findUserByEmail(email: string) {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+
+  return user;
+}
+
+async function upsertIdentityUser(identity: AuthIdentity) {
+  const email = resolveIdentityEmail(identity);
+  const name =
+    identity.name ??
+    email?.split("@", 1)[0]?.replace(/[._-]+/g, " ") ??
+    "Utilisateur AutoDZ";
+  const phone = identity.phone ?? "Non renseigné";
+  const wilaya = identity.wilaya ?? "Alger";
+
+  if (email) {
+    const existing = await findUserByEmail(email);
+
+    if (existing) {
+      const [updatedUser] = await db
+        .update(usersTable)
+        .set({
+          name,
+          phone,
+          whatsapp: identity.phone ?? existing.whatsapp,
+          wilaya,
+          updatedAt: new Date(),
+        })
+        .where(eq(usersTable.id, existing.id))
+        .returning();
+
+      return updatedUser;
+    }
+  }
+
+  const [createdUser] = await db
     .insert(usersTable)
     .values({
-      name: "Utilisateur Test",
-      email: TEST_USER_EMAIL,
+      name,
+      email: email ?? null,
+      phone,
+      whatsapp: identity.phone,
+      wilaya,
+      sellerType: "particulier",
+    })
+    .returning();
+
+  return createdUser;
+}
+
+async function resolveDevFallbackUser() {
+  const existing = await findUserByEmail(DEV_FALLBACK_EMAIL);
+  if (existing) return existing;
+
+  const [fallbackUser] = await db
+    .insert(usersTable)
+    .values({
+      name: "Utilisateur Dev",
+      email: DEV_FALLBACK_EMAIL,
       phone: "0550 00 00 00",
       whatsapp: "0550000000",
       wilaya: "Alger",
       sellerType: "particulier",
     })
-    .returning({ id: usersTable.id });
+    .returning();
 
-  return testUser.id;
+  return fallbackUser;
+}
+
+async function resolveRequestUser(req: Request, explicitUserId?: number) {
+  const identity = getAuthIdentity(req);
+
+  if (identity) {
+    return { user: await upsertIdentityUser(identity), isDevFallback: false };
+  }
+
+  if (explicitUserId) {
+    const user = await findUserById(explicitUserId);
+    if (user) return { user, isDevFallback: false };
+  }
+
+  return { user: await resolveDevFallbackUser(), isDevFallback: true };
+}
+
+async function resolveRequestUserId(req: Request, explicitUserId?: number) {
+  const { user } = await resolveRequestUser(req, explicitUserId);
+  return user.id;
 }
 
 async function ensureListingExists(listingId: number) {
@@ -258,6 +418,25 @@ function toApiDetail(row: ListingRow, sellerTotalAds: number) {
   };
 }
 
+function toAccountUser(user: UserRow, isDevFallback: boolean) {
+  return {
+    id: user.id,
+    name: user.name,
+    initials: initials(user.name),
+    email: user.email,
+    phone: user.phone,
+    whatsapp: user.whatsapp,
+    wilaya: user.wilaya,
+    sellerType: accountSellerTypeLabel(user.sellerType),
+    rating: Number(user.rating),
+    reviewCount: user.reviewCount,
+    verified: user.verified,
+    totalSales: user.totalSales,
+    memberSince: sellerMemberLabel(user.createdAt),
+    isDevFallback,
+  };
+}
+
 async function getFacets() {
   const [marques, wilayas, fuels, transmissions] = await Promise.all([
     db
@@ -318,7 +497,7 @@ router.get("/listings", async (req, res) => {
 
 router.get("/favorites", async (req, res) => {
   const query = FavoriteUserParamsSchema.parse(req.query);
-  const userId = await resolveFavoriteUserId(query.userId);
+  const userId = await resolveRequestUserId(req, query.userId);
 
   const favoriteRows = await db
     .select({ listingId: favoritesTable.listingId })
@@ -344,6 +523,55 @@ router.get("/favorites", async (req, res) => {
   res.json(data);
 });
 
+router.get("/account", async (req, res) => {
+  const { user, isDevFallback } = await resolveRequestUser(req);
+
+  const listingRows = await selectListings()
+    .where(eq(listingsTable.sellerId, user.id))
+    .orderBy(desc(listingsTable.createdAt), desc(listingsTable.id));
+
+  const accountListings = await Promise.all(
+    listingRows.map(async (row) => {
+      const [{ total: favoriteCount }] = await db
+        .select({ total: count() })
+        .from(favoritesTable)
+        .where(eq(favoritesTable.listingId, row.id));
+
+      return {
+        listing: toApiListing(row),
+        status: "active" as const,
+        views: row.views,
+        favorites: favoriteCount,
+        postedDaysAgo: daysAgo(row.createdAt),
+        expiresInDays: Math.max(0, 30 - daysAgo(row.createdAt)),
+        boosted: Boolean(row.badge),
+      };
+    }),
+  );
+
+  const favoriteRows = await db
+    .select({ listingId: favoritesTable.listingId })
+    .from(favoritesTable)
+    .where(eq(favoritesTable.userId, user.id))
+    .orderBy(desc(favoritesTable.createdAt));
+  const favoriteIds = favoriteRows.map((favorite) => favorite.listingId);
+  const favorites = favoriteIds.length
+    ? await selectListings().where(inArray(listingsTable.id, favoriteIds))
+    : [];
+  const favoritesById = new Map(favorites.map((listing) => [listing.id, listing]));
+
+  const data = AccountResponse.parse({
+    user: toAccountUser(user, isDevFallback),
+    listings: accountListings,
+    favorites: favoriteIds
+      .map((listingId) => favoritesById.get(listingId))
+      .filter((listing): listing is ListingRow => Boolean(listing))
+      .map(toApiListing),
+  });
+
+  res.json(data);
+});
+
 router.post("/listings", async (req, res) => {
   const parsed = CreateListingRequest.safeParse(req.body);
 
@@ -357,38 +585,21 @@ router.post("/listings", async (req, res) => {
 
   const body = parsed.data;
   const title = `${body.marque} ${body.modele}`.trim();
+  const { user: currentUser } = await resolveRequestUser(req);
 
   const createdListing = await db.transaction(async (tx) => {
-    const userWhere = body.seller.email
-      ? or(
-          eq(usersTable.email, body.seller.email),
-          eq(usersTable.phone, body.seller.phone),
-        )!
-      : eq(usersTable.phone, body.seller.phone);
-
-    const [existingUser] = await tx
-      .select()
-      .from(usersTable)
-      .where(userWhere)
-      .limit(1);
-
-    const userValues = {
-      name: body.seller.name,
-      email: body.seller.email ?? null,
-      phone: body.seller.phone,
-      whatsapp: body.seller.whatsapp ?? body.seller.phone,
-      wilaya: body.seller.wilaya,
-      sellerType: body.seller.sellerType,
-      updatedAt: new Date(),
-    };
-
-    const [seller] = existingUser
-      ? await tx
-          .update(usersTable)
-          .set(userValues)
-          .where(eq(usersTable.id, existingUser.id))
-          .returning()
-      : await tx.insert(usersTable).values(userValues).returning();
+    const [seller] = await tx
+      .update(usersTable)
+      .set({
+        name: body.seller.name,
+        phone: body.seller.phone,
+        whatsapp: body.seller.whatsapp ?? body.seller.phone,
+        wilaya: body.seller.wilaya,
+        sellerType: body.seller.sellerType,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, currentUser.id))
+      .returning();
 
     const [listing] = await tx
       .insert(listingsTable)
@@ -490,7 +701,7 @@ router.post("/listings/:id/favorite", async (req, res) => {
     return;
   }
 
-  const userId = await resolveFavoriteUserId(parsed.data?.userId);
+  const userId = await resolveRequestUserId(req, parsed.data?.userId);
 
   await db
     .insert(favoritesTable)
@@ -526,7 +737,7 @@ router.delete("/listings/:id/favorite", async (req, res) => {
     return;
   }
 
-  const userId = await resolveFavoriteUserId(parsed.data.userId);
+  const userId = await resolveRequestUserId(req, parsed.data.userId);
 
   await db
     .delete(favoritesTable)
