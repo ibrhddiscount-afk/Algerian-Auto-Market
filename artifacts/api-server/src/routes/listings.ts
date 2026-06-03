@@ -887,7 +887,7 @@ router.patch("/listings/:id", async (req, res) => {
   if (body.description !== undefined) updateData.description = body.description;
   if (body.status !== undefined) updateData.status = body.status;
 
-  if (Object.keys(updateData).length === 0) {
+  if (Object.keys(updateData).length === 0 && body.photos === undefined) {
     res.status(400).json({ message: "Aucune modification fournie" });
     return;
   }
@@ -895,10 +895,30 @@ router.patch("/listings/:id", async (req, res) => {
   const owned = await resolveOwnedListingOrRespond(req, res, listingId);
   if (!owned) return;
 
-  await db
-    .update(listingsTable)
-    .set({ ...updateData, updatedAt: new Date() })
-    .where(eq(listingsTable.id, listingId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(listingsTable)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(listingsTable.id, listingId));
+
+    if (body.photos !== undefined) {
+      await tx
+        .delete(listingPhotosTable)
+        .where(eq(listingPhotosTable.listingId, listingId));
+
+      const photoValues = body.photos.map((photo, position) => ({
+        listingId,
+        url: photo.url,
+        alt: photo.alt ?? body.title ?? "Photo annonce",
+        position: photo.position ?? position,
+        isPrimary: photo.isPrimary ?? position === 0,
+      }));
+
+      if (photoValues.length > 0) {
+        await tx.insert(listingPhotosTable).values(photoValues);
+      }
+    }
+  });
 
   const data = await buildListingDetailResponse(listingId, UpdateListingResponse);
 

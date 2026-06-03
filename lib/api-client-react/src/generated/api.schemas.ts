@@ -153,6 +153,7 @@ export interface UpdateListingRequest {
   location?: string;
   description?: string;
   status?: ListingStatus;
+  photos?: CreateListingPhoto[];
 }
 
 export type UpdateListingResponse = ListingDetailResponse;

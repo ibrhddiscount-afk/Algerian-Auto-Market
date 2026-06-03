@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, type KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateListing, type CreateListingPhoto, type CreateListingRequest } from "@workspace/api-client-react";
@@ -152,6 +152,7 @@ function Field({ label, required, children, hint }: { label: string; required?: 
 const inputCls = "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30 focus:border-[#1a7a3c] transition-colors placeholder-gray-300";
 const selectCls = `${inputCls} appearance-none cursor-pointer`;
 const DEFAULT_SUBMIT_ERROR = "Impossible de publier l'annonce pour le moment.";
+const PHOTO_INPUT_ID = "post-ad-photo-input";
 
 function getSubmitErrorMessage(error: unknown): string {
   if (error instanceof globalThis.Error && error.message) return error.message;
@@ -244,6 +245,14 @@ export default function PostAd() {
     const arr = acceptedFiles;
     set("photos", [...form.photos, ...arr]);
   }, [form.photos]);
+
+  const handlePhotoPickerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      fileInputRef.current?.click();
+    }
+  };
 
   const toOptionalNumber = (value: string) => {
     const parsed = Number(value);
@@ -607,12 +616,25 @@ export default function PostAd() {
             </p>
 
             {/* Drop zone */}
+            <input
+              id={PHOTO_INPUT_ID}
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              aria-label="Choisir des photos depuis votre ordinateur"
+              onChange={(event) => {
+                handleFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
             <div
+              aria-label="Glisser-déposer des photos"
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${
+              className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-3 transition-all ${
                 dragOver ? "border-[#1a7a3c] bg-[#f0faf4]" : "border-gray-200 hover:border-[#1a7a3c] hover:bg-gray-50"
               }`}
             >
@@ -621,7 +643,20 @@ export default function PostAd() {
               </div>
               <div className="text-center">
                 <p className="font-bold text-gray-700">Glisser-déposer vos photos ici</p>
-                <p className="text-sm text-gray-400 mt-0.5">ou <span className="text-[#1a7a3c] font-semibold">cliquer pour parcourir</span></p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  onKeyDown={handlePhotoPickerKeyDown}
+                  disabled={form.photos.length >= getMaxListingPhotos()}
+                  className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-xl bg-[#1a7a3c] text-white text-sm font-bold shadow-sm hover:bg-[#15632f] disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30"
+                >
+                  <Upload className="w-4 h-4" />
+                  Choisir des photos
+                </button>
               </div>
             <p className="text-xs text-gray-400">JPG, PNG · Max 10 photos · Max 5 Mo par photo</p>
               {photoError && (
@@ -629,14 +664,6 @@ export default function PostAd() {
                   <AlertCircle className="w-3 h-3" /> {photoError}
                 </p>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                className="hidden"
-                onChange={e => handleFiles(e.target.files)}
-              />
             </div>
 
             {/* Photo previews */}
@@ -644,11 +671,6 @@ export default function PostAd() {
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-semibold text-gray-700">{form.photos.length} photo{form.photos.length > 1 ? "s" : ""} ajoutée{form.photos.length > 1 ? "s" : ""}</p>
-                  {form.photos.length < 10 && (
-                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 text-xs text-[#1a7a3c] font-semibold hover:underline">
-                      <Plus className="w-3.5 h-3.5" /> Ajouter
-                    </button>
-                  )}
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                   {form.photos.map((photo, i) => (
@@ -660,6 +682,7 @@ export default function PostAd() {
                         </div>
                       )}
                       <button
+                        type="button"
                         onClick={e => { e.stopPropagation(); setPhotoError(null); set("photos", form.photos.filter((_, j) => j !== i)); }}
                         aria-label={`Retirer la photo ${i + 1}`}
                         title={`Retirer la photo ${i + 1}`}
@@ -669,14 +692,6 @@ export default function PostAd() {
                       </button>
                     </div>
                   ))}
-                  {form.photos.length < 10 && (
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="aspect-square rounded-xl border-2 border-dashed border-gray-200 hover:border-[#1a7a3c] flex items-center justify-center transition-colors"
-                    >
-                      <Plus className="w-6 h-6 text-gray-300" />
-                    </button>
-                  )}
                 </div>
               </div>
             )}

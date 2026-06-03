@@ -172,6 +172,7 @@ export const UpdateListingRequest = zod.object({
   location: zod.string().trim().min(1).max(160).optional(),
   description: zod.string().trim().max(1000).optional(),
   status: ListingStatusSchema.optional(),
+  photos: zod.array(CreateListingPhotoSchema).max(10).optional(),
 });
 
 export const UpdateListingResponse = ListingDetailResponse;

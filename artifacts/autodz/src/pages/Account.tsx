@@ -1,11 +1,11 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   User, Star, Eye, MessageCircle, Heart,
   Plus, Edit3, Trash2, Zap, Clock, CheckCircle,
   Phone, Car, AlertCircle, Bell, Settings,
-  BarChart2, X, RefreshCw,
+  BarChart2, X, RefreshCw, Upload,
 } from "lucide-react";
 import {
   useGetAccount,
@@ -13,11 +13,18 @@ import {
   useListFavorites,
   useUpdateListing,
   type AccountListing,
+  type CreateListingPhoto,
   type Listing as ApiListing,
+  type ListingPhoto,
   type ListingStatus,
   type UpdateListingRequest,
 } from "@workspace/api-client-react";
 import { useFavoriteListing } from "@/hooks/use-favorite-listing";
+import {
+  getMaxListingPhotos,
+  uploadListingPhotos,
+  validateListingPhoto,
+} from "@/lib/listing-photo-storage";
 
 type Tab = "annonces" | "messages" | "favoris" | "profil";
 type AdStatus = AccountListing["status"];
@@ -30,6 +37,13 @@ type EditListingForm = {
   description: string;
   status: ListingStatus;
 };
+type EditablePhoto = {
+  key: string;
+  url: string;
+  alt?: string;
+  isPrimary: boolean;
+  file?: File;
+};
 
 const STATUS_CONFIG: Record<AdStatus, { label: string; color: string; dot: string }> = {
   active:  { label: "Active",  color: "bg-green-100 text-green-700",  dot: "bg-green-500"  },
@@ -40,6 +54,7 @@ const STATUS_CONFIG: Record<AdStatus, { label: string; color: string; dot: strin
 const ACCOUNT_QUERY_KEY = ["/api/account"] as const;
 const LISTINGS_QUERY_KEY = ["/api/listings"] as const;
 const FAVORITES_QUERY_KEY = ["/api/favorites"] as const;
+const EDIT_PHOTO_INPUT_ID = "account-edit-listing-photo-input";
 
 function getApiErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -53,6 +68,7 @@ function getApiErrorMessage(error: unknown) {
 export default function Account() {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
+  const editPhotoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<Tab>("annonces");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editingAd, setEditingAd] = useState<AccountListing | null>(null);
@@ -67,6 +83,10 @@ export default function Account() {
   });
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [editPhotos, setEditPhotos] = useState<EditablePhoto[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isUploadingEditPhotos, setIsUploadingEditPhotos] = useState(false);
+  const [editPhotoDragOver, setEditPhotoDragOver] = useState(false);
   const accountQuery = useGetAccount();
   const favoritesQuery = useListFavorites();
   const updateListingMutation = useUpdateListing();
@@ -109,10 +129,39 @@ export default function Account() {
     ]);
   };
 
+  const revokeNewPhotoPreviews = (photos: EditablePhoto[]) => {
+    photos.forEach((photo) => {
+      if (photo.file) URL.revokeObjectURL(photo.url);
+    });
+  };
+
+  const toEditablePhotos = (photos: ListingPhoto[] | undefined): EditablePhoto[] => {
+    const normalizedPhotos = photos ?? [];
+
+    return normalizedPhotos.map((photo, index) => ({
+      key: `${photo.url}-${index}`,
+      url: photo.url,
+      alt: photo.alt,
+      isPrimary: photo.isPrimary || (index === 0 && !normalizedPhotos.some((item) => item.isPrimary)),
+    }));
+  };
+
+  const closeEditModal = () => {
+    revokeNewPhotoPreviews(editPhotos);
+    setEditingAd(null);
+    setEditPhotos([]);
+    setPhotoError(null);
+    setIsUploadingEditPhotos(false);
+    setEditPhotoDragOver(false);
+  };
+
   const openEditModal = (ad: AccountListing) => {
+    revokeNewPhotoPreviews(editPhotos);
     setActionError(null);
     setActionSuccess(null);
+    setPhotoError(null);
     setEditingAd(ad);
+    setEditPhotos(toEditablePhotos(ad.listing.photos));
     setEditForm({
       title: ad.listing.title,
       priceRaw: String(ad.listing.priceRaw),
@@ -124,10 +173,109 @@ export default function Account() {
     });
   };
 
+  const normalizePrimaryPhoto = (photos: EditablePhoto[]) => {
+    if (photos.length === 0) return photos;
+    const primaryIndex = photos.findIndex((photo) => photo.isPrimary);
+    const safePrimaryIndex = primaryIndex >= 0 ? primaryIndex : 0;
+
+    return photos.map((photo, index) => ({
+      ...photo,
+      isPrimary: index === safePrimaryIndex,
+    }));
+  };
+
+  const handleEditPhotoFiles = (files: FileList | null) => {
+    if (!files) return;
+
+    setPhotoError(null);
+
+    const remainingSlots = getMaxListingPhotos() - editPhotos.length;
+
+    if (remainingSlots <= 0) {
+      setPhotoError(`Vous pouvez ajouter jusqu'à ${getMaxListingPhotos()} photos maximum.`);
+      return;
+    }
+
+    const acceptedPhotos: EditablePhoto[] = [];
+
+    for (const file of Array.from(files)) {
+      const validationError = validateListingPhoto(file);
+
+      if (validationError) {
+        setPhotoError(validationError);
+        continue;
+      }
+
+      if (acceptedPhotos.length >= remainingSlots) {
+        setPhotoError(`Seulement ${remainingSlots} photo${remainingSlots > 1 ? "s" : ""} supplémentaire${remainingSlots > 1 ? "s" : ""} ajoutée${remainingSlots > 1 ? "s" : ""}.`);
+        break;
+      }
+
+      acceptedPhotos.push({
+        key: `new-${Date.now()}-${acceptedPhotos.length}-${file.name}`,
+        url: URL.createObjectURL(file),
+        alt: file.name,
+        isPrimary: false,
+        file,
+      });
+    }
+
+    if (acceptedPhotos.length === 0) return;
+
+    setEditPhotos((photos) => normalizePrimaryPhoto([...photos, ...acceptedPhotos]));
+  };
+
+  const handleEditPhotoKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      editPhotoInputRef.current?.click();
+    }
+  };
+
+  const removeEditPhoto = (photoKey: string) => {
+    setEditPhotos((photos) => {
+      const removedPhoto = photos.find((photo) => photo.key === photoKey);
+      if (removedPhoto?.file) URL.revokeObjectURL(removedPhoto.url);
+
+      return normalizePrimaryPhoto(photos.filter((photo) => photo.key !== photoKey));
+    });
+  };
+
+  const setPrimaryEditPhoto = (photoKey: string) => {
+    setEditPhotos((photos) =>
+      photos.map((photo) => ({
+        ...photo,
+        isPrimary: photo.key === photoKey,
+      })),
+    );
+  };
+
+  const buildFinalPhotos = async (): Promise<CreateListingPhoto[]> => {
+    const newPhotos = editPhotos.filter((photo) => photo.file);
+    const uploadedPhotos = await uploadListingPhotos(
+      newPhotos.map((photo) => photo.file).filter((file): file is File => Boolean(file)),
+    );
+    let uploadedIndex = 0;
+    const normalizedPhotos = normalizePrimaryPhoto(editPhotos);
+
+    return normalizedPhotos.map((photo, position) => {
+      const uploadedPhoto = photo.file ? uploadedPhotos[uploadedIndex++] : undefined;
+
+      return {
+        url: uploadedPhoto?.url ?? photo.url,
+        alt: photo.alt ?? uploadedPhoto?.alt,
+        position,
+        isPrimary: photo.isPrimary,
+      };
+    });
+  };
+
   const handleUpdateListing = async (
     listingId: number,
     data: UpdateListingRequest,
     successMessage: string,
+    options?: { keepModalOpen?: boolean },
   ) => {
     setActionError(null);
     setActionSuccess(null);
@@ -136,7 +284,7 @@ export default function Account() {
       await updateListingMutation.mutateAsync({ listingId, data });
       await invalidateListingQueries(listingId);
       setActionSuccess(successMessage);
-      setEditingAd(null);
+      if (!options?.keepModalOpen) closeEditModal();
     } catch (error) {
       setActionError(getApiErrorMessage(error));
     }
@@ -146,19 +294,31 @@ export default function Account() {
     event.preventDefault();
     if (!editingAd) return;
 
-    await handleUpdateListing(
-      editingAd.listing.id,
-      {
-        title: editForm.title,
-        priceRaw: Number(editForm.priceRaw),
-        kmRaw: Number(editForm.kmRaw),
-        wilaya: editForm.wilaya,
-        location: editForm.location,
-        description: editForm.description,
-        status: editForm.status,
-      },
-      "Annonce modifiée avec succès.",
-    );
+    setPhotoError(null);
+
+    try {
+      setIsUploadingEditPhotos(true);
+      const photos = await buildFinalPhotos();
+      setIsUploadingEditPhotos(false);
+
+      await handleUpdateListing(
+        editingAd.listing.id,
+        {
+          title: editForm.title,
+          priceRaw: Number(editForm.priceRaw),
+          kmRaw: Number(editForm.kmRaw),
+          wilaya: editForm.wilaya,
+          location: editForm.location,
+          description: editForm.description,
+          status: editForm.status,
+          photos,
+        },
+        "Annonce modifiée avec succès.",
+      );
+    } catch (error) {
+      setIsUploadingEditPhotos(false);
+      setPhotoError(getApiErrorMessage(error));
+    }
   };
 
   const handleDeleteListing = async () => {
@@ -646,7 +806,7 @@ export default function Account() {
           <button
             type="button"
             className="absolute inset-0 bg-black/40"
-            onClick={() => setEditingAd(null)}
+            onClick={closeEditModal}
             aria-label="Fermer la modification"
           />
           <form
@@ -660,7 +820,7 @@ export default function Account() {
               </div>
               <button
                 type="button"
-                onClick={() => setEditingAd(null)}
+                onClick={closeEditModal}
                 className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
                 aria-label="Fermer"
                 title="Fermer"
@@ -746,20 +906,136 @@ export default function Account() {
               </label>
             </div>
 
+            <div
+              className="mt-5 border-t border-gray-100 pt-5"
+              onDragOver={(event) => {
+                event.preventDefault();
+                setEditPhotoDragOver(true);
+              }}
+              onDragLeave={() => setEditPhotoDragOver(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setEditPhotoDragOver(false);
+                handleEditPhotoFiles(event.dataTransfer.files);
+              }}
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h4 className="text-sm font-extrabold text-gray-900">Photos de l'annonce</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Jusqu'à {getMaxListingPhotos()} photos · JPG, PNG, WebP ou GIF · 5 Mo max.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    editPhotoInputRef.current?.click();
+                  }}
+                  onKeyDown={handleEditPhotoKeyDown}
+                  disabled={editPhotos.length >= getMaxListingPhotos() || isUploadingEditPhotos}
+                  aria-label="Choisir des photos depuis votre ordinateur"
+                  className="shrink-0 flex items-center gap-1.5 text-xs font-bold bg-[#1a7a3c] text-white px-3 py-2 rounded-xl hover:bg-[#15632f] disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/30"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Choisir des photos
+                </button>
+                <input
+                  id={EDIT_PHOTO_INPUT_ID}
+                  ref={editPhotoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
+                  className="sr-only"
+                  aria-label="Choisir des photos depuis votre ordinateur"
+                  onChange={(event) => {
+                    handleEditPhotoFiles(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </div>
+
+              {photoError && (
+                <div className="mb-3 bg-red-50 border border-red-100 text-red-700 rounded-xl px-3 py-2 text-xs font-medium flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{photoError}</span>
+                </div>
+              )}
+
+              {editPhotos.length === 0 ? (
+                <div
+                  className={`block border-2 border-dashed rounded-2xl p-5 text-center transition-all ${
+                    editPhotoDragOver
+                      ? "border-[#1a7a3c] bg-[#f0faf4]"
+                      : "border-gray-200 hover:border-[#1a7a3c] hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                    <Car className="w-6 h-6 text-gray-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-500">Aucune photo pour cette annonce.</p>
+                  <p className="text-xs text-gray-400 mt-2">Le site affichera le placeholder véhicule par défaut si vous n'ajoutez rien.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {editPhotos.map((photo, index) => (
+                    <div key={photo.key} className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 group">
+                      <img
+                        src={photo.url}
+                        alt={photo.alt ?? `Photo ${index + 1}`}
+                        className="w-full h-28 object-cover"
+                      />
+                      {photo.isPrimary && (
+                        <span className="absolute top-2 left-2 text-[10px] font-bold bg-[#1a7a3c] text-white px-2 py-1 rounded-full shadow">
+                          Principale
+                        </span>
+                      )}
+                      <div className="absolute inset-x-2 bottom-2 flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryEditPhoto(photo.key)}
+                          disabled={photo.isPrimary || isUploadingEditPhotos}
+                          className="flex-1 text-[10px] font-bold bg-white/90 text-gray-700 px-2 py-1.5 rounded-lg shadow-sm disabled:text-gray-400 disabled:cursor-not-allowed"
+                        >
+                          Principale
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeEditPhoto(photo.key)}
+                          disabled={isUploadingEditPhotos}
+                          aria-label={`Supprimer la photo ${index + 1}`}
+                          title="Supprimer la photo"
+                          className="w-8 bg-white/90 text-red-500 rounded-lg shadow-sm flex items-center justify-center disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 mt-6">
               <button
                 type="button"
-                onClick={() => setEditingAd(null)}
+                onClick={closeEditModal}
+                disabled={isUploadingEditPhotos || updateListingMutation.isPending}
                 className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                disabled={updateListingMutation.isPending}
+                disabled={isUploadingEditPhotos || updateListingMutation.isPending}
                 className="flex-1 py-2.5 bg-[#1a7a3c] hover:bg-[#15632f] text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-60"
               >
-                {updateListingMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+                {isUploadingEditPhotos
+                  ? "Upload des photos..."
+                  : updateListingMutation.isPending
+                    ? "Enregistrement..."
+                    : "Enregistrer"}
               </button>
             </div>
           </form>
