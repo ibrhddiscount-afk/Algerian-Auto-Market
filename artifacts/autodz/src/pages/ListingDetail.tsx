@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, Heart, Share2, Phone, MessageCircle, CheckCircle,
@@ -7,7 +8,9 @@ import {
   Award, AlertCircle, Car,
 } from "lucide-react";
 import {
+  useCreateListingMessage,
   useGetListing,
+  type CreateListingMessageRequest,
   type Listing,
   type ListingDetail as ListingDetailData,
 } from "@workspace/api-client-react";
@@ -28,6 +31,39 @@ const ETAT_COLORS: Record<string, string> = {
   "Bon":       "bg-yellow-100 text-yellow-700",
   "Passable":  "bg-orange-100 text-orange-700",
 };
+
+type MessageForm = CreateListingMessageRequest;
+
+const INITIAL_MESSAGE_FORM: MessageForm = {
+  name: "",
+  email: "",
+  phone: "",
+  message: "",
+};
+
+function getApiErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "Impossible d'envoyer le message pour le moment. Réessayez dans un instant.";
+}
+
+function validateMessageForm(form: MessageForm) {
+  const email = form.email?.trim();
+
+  if (form.name.trim().length < 2) return "Indiquez votre nom.";
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Indiquez un email valide ou laissez le champ vide.";
+  if (form.phone.trim().length < 6) return "Indiquez un numéro de téléphone valide.";
+  if (form.message.trim().length < 10) return "Votre message doit contenir au moins 10 caractères.";
+
+  return undefined;
+}
+
+function cleanPhoneHref(phone: string) {
+  return phone.replace(/[^\d+]/g, "");
+}
 
 function GallerySlide({ color, title, angle }: { color: string; title: string; angle: number }) {
   const transforms = [
@@ -66,11 +102,13 @@ function GallerySlide({ color, title, angle }: { color: string; title: string; a
 }
 
 export default function ListingDetail() {
+  const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const id = parseInt(params.id ?? "1", 10);
 
   const { data, isLoading, isError } = useGetListing(id);
+  const createMessageMutation = useCreateListingMessage();
   const listing = data?.listing;
   const detail = data?.detail;
   const similar = data?.similar ?? [];
@@ -80,6 +118,9 @@ export default function ListingDetail() {
   const { favorited, isPending: favoritePending, toggleFavorite } = useFavoriteListing(id);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [messageForm, setMessageForm] = useState<MessageForm>(INITIAL_MESSAGE_FORM);
+  const [messageError, setMessageError] = useState<string | null>(null);
+  const [messageSuccess, setMessageSuccess] = useState<string | null>(null);
   const slideCount = photos.length || 5;
 
   useEffect(() => {
@@ -133,6 +174,37 @@ export default function ListingDetail() {
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessageError(null);
+    setMessageSuccess(null);
+
+    const validationError = validateMessageForm(messageForm);
+    if (validationError) {
+      setMessageError(validationError);
+      return;
+    }
+
+    const payload: MessageForm = {
+      name: messageForm.name.trim(),
+      email: messageForm.email?.trim() || undefined,
+      phone: messageForm.phone.trim(),
+      message: messageForm.message.trim(),
+    };
+
+    try {
+      await createMessageMutation.mutateAsync({ listingId: id, data: payload });
+      await queryClient.invalidateQueries({ queryKey: ["/api/account/messages"] });
+      setMessageSuccess("Votre message a bien été envoyé au vendeur.");
+      setMessageForm(INITIAL_MESSAGE_FORM);
+    } catch (error) {
+      setMessageError(getApiErrorMessage(error));
+    }
+  }
+
+  const phoneHref = cleanPhoneHref(detail.sellerPhone);
+  const whatsappHref = cleanPhoneHref(detail.sellerWhatsapp || detail.sellerPhone).replace(/\D/g, "");
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
@@ -352,26 +424,47 @@ export default function ListingDetail() {
 
           {/* CTA buttons */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-            <a
-              href={`https://wa.me/${detail.sellerWhatsapp.replace(/\D/g, "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full bg-[#25d366] hover:bg-[#1ebe5e] text-white font-bold py-3 rounded-xl transition-colors text-sm"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Contacter sur WhatsApp
-            </a>
-
-            {phoneRevealed ? (
+            {whatsappHref ? (
               <a
-                href={`tel:${detail.sellerPhone.replace(/\s/g, "")}`}
+                href={`https://wa.me/${whatsappHref}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full bg-[#25d366] hover:bg-[#1ebe5e] text-white font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Contacter sur WhatsApp
+              </a>
+            ) : (
+              <button
+                disabled
+                aria-disabled="true"
+                className="flex items-center justify-center gap-2 w-full bg-gray-100 text-gray-400 font-bold py-3 rounded-xl text-sm cursor-not-allowed"
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp indisponible
+              </button>
+            )}
+
+            {phoneRevealed && phoneHref ? (
+              <a
+                href={`tel:${phoneHref}`}
                 className="flex items-center justify-center gap-2 w-full border-2 border-[#1a7a3c] text-[#1a7a3c] hover:bg-[#f0faf4] font-bold py-3 rounded-xl transition-colors text-sm"
               >
                 <Phone className="w-4 h-4" />
                 {detail.sellerPhone}
               </a>
+            ) : !phoneHref ? (
+              <button
+                disabled
+                aria-disabled="true"
+                className="flex items-center justify-center gap-2 w-full border-2 border-gray-200 text-gray-400 font-bold py-3 rounded-xl text-sm cursor-not-allowed"
+              >
+                <Phone className="w-4 h-4" />
+                Téléphone indisponible
+              </button>
             ) : (
               <button
+                type="button"
                 onClick={() => setPhoneRevealed(true)}
                 className="flex items-center justify-center gap-2 w-full border-2 border-[#1a7a3c] text-[#1a7a3c] hover:bg-[#f0faf4] font-bold py-3 rounded-xl transition-colors text-sm"
               >
@@ -380,6 +473,88 @@ export default function ListingDetail() {
               </button>
             )}
           </div>
+
+          {/* Message form */}
+          <form
+            onSubmit={(event) => void handleSendMessage(event)}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3"
+          >
+            <div>
+              <h3 className="text-sm font-extrabold text-gray-900">Envoyer un message au vendeur</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Le vendeur recevra vos coordonnées pour vous répondre.</p>
+            </div>
+
+            {messageError && (
+              <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl px-3 py-2 text-xs font-medium flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>{messageError}</span>
+              </div>
+            )}
+            {messageSuccess && (
+              <div className="bg-green-50 border border-green-100 text-green-700 rounded-xl px-3 py-2 text-xs font-medium flex items-start gap-2">
+                <CheckCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>{messageSuccess}</span>
+              </div>
+            )}
+
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">Nom</span>
+              <input
+                value={messageForm.name}
+                onChange={(event) => setMessageForm((form) => ({ ...form, name: event.target.value }))}
+                required
+                minLength={2}
+                maxLength={160}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                placeholder="Votre nom"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">Email optionnel</span>
+              <input
+                type="email"
+                value={messageForm.email}
+                onChange={(event) => setMessageForm((form) => ({ ...form, email: event.target.value }))}
+                maxLength={255}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                placeholder="vous@email.com"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">Téléphone</span>
+              <input
+                type="tel"
+                value={messageForm.phone}
+                onChange={(event) => setMessageForm((form) => ({ ...form, phone: event.target.value }))}
+                required
+                minLength={6}
+                maxLength={40}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                placeholder="0550 00 00 00"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">Message</span>
+              <textarea
+                value={messageForm.message}
+                onChange={(event) => setMessageForm((form) => ({ ...form, message: event.target.value }))}
+                required
+                minLength={10}
+                maxLength={2000}
+                rows={4}
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                placeholder="Bonjour, votre véhicule est-il toujours disponible ?"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={createMessageMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 bg-[#1a7a3c] hover:bg-[#15632f] text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:opacity-60 disabled:cursor-wait"
+            >
+              <MessageCircle className="w-4 h-4" />
+              {createMessageMutation.isPending ? "Envoi en cours..." : "Envoyer le message"}
+            </button>
+          </form>
 
           {/* Seller card */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">

@@ -163,6 +163,65 @@ export interface DeleteListingResponse {
   deleted: boolean;
 }
 
+export interface CreateListingMessageRequest {
+  name: string;
+  email?: string;
+  phone: string;
+  message: string;
+}
+
+export interface MessageReply {
+  id: number;
+  messageId: number;
+  authorId: number | null;
+  authorRole: string;
+  authorName: string;
+  authorEmail: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface ListingMessage {
+  id: number;
+  listingId: number;
+  listingTitle: string;
+  senderId: number | null;
+  sellerId: number;
+  name: string;
+  email: string | null;
+  phone: string;
+  message: string;
+  createdAt: string;
+  readAt: string | null;
+  replies: MessageReply[];
+}
+
+export interface CreateListingMessageResponse {
+  message: ListingMessage;
+}
+
+export interface AccountMessagesResponse {
+  items: ListingMessage[];
+  unreadCount: number;
+}
+
+export interface AccountConversationsResponse {
+  items: ListingMessage[];
+  unreadCount: number;
+}
+
+export interface MarkListingMessageReadResponse {
+  message: ListingMessage;
+}
+
+export interface CreateMessageReplyRequest {
+  body: string;
+}
+
+export interface CreateMessageReplyResponse {
+  message: ListingMessage;
+}
+
 export interface FavoriteUserParams {
   userId?: number;
 }

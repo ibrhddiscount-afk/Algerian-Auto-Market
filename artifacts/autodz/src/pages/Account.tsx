@@ -8,14 +8,21 @@ import {
   BarChart2, X, RefreshCw, Upload,
 } from "lucide-react";
 import {
+  useCreateMessageReply,
   useGetAccount,
+  useGetAccountConversations,
+  useGetAccountMessages,
   useDeleteListing,
   useListFavorites,
+  useMarkListingMessageRead,
   useUpdateListing,
+  type AccountConversationsResponse,
+  type AccountMessagesResponse,
   type AccountListing,
   type CreateListingPhoto,
   type Listing as ApiListing,
   type ListingPhoto,
+  type ListingMessage,
   type ListingStatus,
   type UpdateListingRequest,
 } from "@workspace/api-client-react";
@@ -26,7 +33,7 @@ import {
   validateListingPhoto,
 } from "@/lib/listing-photo-storage";
 
-type Tab = "annonces" | "messages" | "favoris" | "profil";
+type Tab = "annonces" | "messages" | "conversations" | "favoris" | "profil";
 type AdStatus = AccountListing["status"];
 type EditListingForm = {
   title: string;
@@ -52,6 +59,8 @@ const STATUS_CONFIG: Record<AdStatus, { label: string; color: string; dot: strin
 };
 
 const ACCOUNT_QUERY_KEY = ["/api/account"] as const;
+const ACCOUNT_MESSAGES_QUERY_KEY = ["/api/account/messages"] as const;
+const ACCOUNT_CONVERSATIONS_QUERY_KEY = ["/api/account/conversations"] as const;
 const LISTINGS_QUERY_KEY = ["/api/listings"] as const;
 const FAVORITES_QUERY_KEY = ["/api/favorites"] as const;
 const EDIT_PHOTO_INPUT_ID = "account-edit-listing-photo-input";
@@ -63,6 +72,35 @@ function getApiErrorMessage(error: unknown) {
     if (typeof message === "string") return message;
   }
   return "Une erreur est survenue. Réessayez dans un instant.";
+}
+
+function formatMessageDate(value: string) {
+  return new Intl.DateTimeFormat("fr-DZ", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function cleanPhoneForLink(phone: string) {
+  return phone.replace(/[^\d+]/g, "");
+}
+
+function buildMailtoUrl(message: ListingMessage) {
+  if (!message.email) return undefined;
+
+  const subject = `Réponse à votre message concernant ${message.listingTitle}`;
+  const body = `Bonjour ${message.name},\n\nMerci pour votre message concernant "${message.listingTitle}".\n\n`;
+  const params = new URLSearchParams({ subject, body });
+
+  return `mailto:${message.email}?${params.toString()}`;
+}
+
+function buildWhatsappUrl(message: ListingMessage) {
+  const phone = cleanPhoneForLink(message.phone).replace(/\D/g, "");
+  if (!phone) return undefined;
+
+  const text = `Bonjour ${message.name}, merci pour votre message concernant "${message.listingTitle}".`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
 export default function Account() {
@@ -87,12 +125,24 @@ export default function Account() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isUploadingEditPhotos, setIsUploadingEditPhotos] = useState(false);
   const [editPhotoDragOver, setEditPhotoDragOver] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<ListingMessage | null>(null);
+  const [messageActionError, setMessageActionError] = useState<string | null>(null);
+  const [messageActionSuccess, setMessageActionSuccess] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState("");
   const accountQuery = useGetAccount();
+  const accountConversationsQuery = useGetAccountConversations();
+  const accountMessagesQuery = useGetAccountMessages();
   const favoritesQuery = useListFavorites();
   const updateListingMutation = useUpdateListing();
   const deleteListingMutation = useDeleteListing();
+  const markMessageReadMutation = useMarkListingMessageRead();
+  const createMessageReplyMutation = useCreateMessageReply();
   const account = accountQuery.data;
   const accountListings = account?.listings ?? [];
+  const accountConversations = accountConversationsQuery.data?.items ?? [];
+  const accountMessages = accountMessagesQuery.data?.items ?? [];
+  const unreadConversations = accountConversationsQuery.data?.unreadCount ?? 0;
+  const unreadMessages = accountMessagesQuery.data?.unreadCount ?? 0;
   const favoriteListings = favoritesQuery.data?.items ?? [];
   const accountUser = account?.user;
   const profile = {
@@ -112,15 +162,18 @@ export default function Account() {
 
   const activeAds  = accountListings.filter(a => a.status === "active").length;
   const totalViews = accountListings.reduce((s, a) => s + a.views, 0);
-  const totalMsgs  = 0;
+  const totalMsgs  = accountMessages.length;
   const totalFavs  = accountListings.reduce((s, a) => s + a.favorites, 0);
   const updatingListingId = updateListingMutation.isPending
     ? updateListingMutation.variables?.listingId
     : undefined;
+  const selectedMessageFresh = selectedMessage;
 
   const invalidateListingQueries = async (listingId?: number) => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ACCOUNT_MESSAGES_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: ACCOUNT_CONVERSATIONS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: LISTINGS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: FAVORITES_QUERY_KEY }),
       listingId
@@ -337,6 +390,97 @@ export default function Account() {
     }
   };
 
+  const updateMessageInCache = (updatedMessage: ListingMessage) => {
+    const updateCachedMessages = <
+      TMessages extends AccountMessagesResponse | AccountConversationsResponse,
+    >(currentMessages: TMessages | undefined) => {
+      if (!currentMessages) return currentMessages;
+
+      const items = currentMessages.items.map((message) =>
+        message.id === updatedMessage.id ? updatedMessage : message,
+      );
+
+      return {
+        ...currentMessages,
+        items,
+        unreadCount: items.filter(
+          (message) => message.sellerId === accountUser?.id && message.readAt === null,
+        ).length,
+      };
+    };
+
+    queryClient.setQueryData<AccountMessagesResponse>(
+      ACCOUNT_MESSAGES_QUERY_KEY,
+      updateCachedMessages,
+    );
+    queryClient.setQueryData<AccountConversationsResponse>(
+      ACCOUNT_CONVERSATIONS_QUERY_KEY,
+      updateCachedMessages,
+    );
+  };
+
+  const openMessage = (message: ListingMessage) => {
+    setMessageActionError(null);
+    setMessageActionSuccess(null);
+    setReplyBody("");
+    setSelectedMessage(message);
+  };
+
+  const closeMessage = () => {
+    setSelectedMessage(null);
+    setMessageActionError(null);
+    setMessageActionSuccess(null);
+    setReplyBody("");
+  };
+
+  const handleMarkMessageRead = async (messageId: number) => {
+    setMessageActionError(null);
+    setMessageActionSuccess(null);
+
+    try {
+      const result = await markMessageReadMutation.mutateAsync({ messageId });
+      updateMessageInCache(result.message);
+      setSelectedMessage(result.message);
+      setMessageActionSuccess("Message marqué comme lu.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_MESSAGES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_CONVERSATIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY }),
+      ]);
+    } catch (error) {
+      setMessageActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const handleSendMessageReply = async (messageId: number) => {
+    const body = replyBody.trim();
+    setMessageActionError(null);
+    setMessageActionSuccess(null);
+
+    if (body.length < 2) {
+      setMessageActionError("Votre réponse doit contenir au moins 2 caractères.");
+      return;
+    }
+
+    try {
+      const result = await createMessageReplyMutation.mutateAsync({
+        messageId,
+        data: { body },
+      });
+      updateMessageInCache(result.message);
+      setSelectedMessage(result.message);
+      setReplyBody("");
+      setMessageActionSuccess("Réponse envoyée dans la messagerie interne.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_MESSAGES_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_CONVERSATIONS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY }),
+      ]);
+    } catch (error) {
+      setMessageActionError(getApiErrorMessage(error));
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
       {/* Breadcrumb */}
@@ -413,7 +557,7 @@ export default function Account() {
           {[
             { icon: <Car className="w-4 h-4 text-[#1a7a3c]" />,          label: "Annonces actives",  value: activeAds,                  suffix: "" },
             { icon: <Eye className="w-4 h-4 text-blue-500" />,           label: "Vues totales",       value: totalViews.toLocaleString(), suffix: "" },
-            { icon: <MessageCircle className="w-4 h-4 text-green-500" />, label: "Messages reçus",    value: totalMsgs,                  suffix: "" },
+            { icon: <MessageCircle className="w-4 h-4 text-green-500" />, label: "Conversations",    value: accountConversations.length, suffix: "" },
             { icon: <Heart className="w-4 h-4 text-red-400" />,          label: "Favoris",            value: totalFavs,                  suffix: "" },
           ].map(stat => (
             <div key={stat.label} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
@@ -433,7 +577,8 @@ export default function Account() {
       <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1.5 mb-5">
         {([
           { id: "annonces" as Tab, label: "Mes annonces", icon: <Car className="w-4 h-4" />, badge: activeAds },
-          { id: "messages" as Tab, label: "Messages",     icon: <MessageCircle className="w-4 h-4" />, badge: 0 },
+          { id: "messages" as Tab, label: "Messages",     icon: <MessageCircle className="w-4 h-4" />, badge: unreadMessages || totalMsgs },
+          { id: "conversations" as Tab, label: "Conversations", icon: <MessageCircle className="w-4 h-4" />, badge: unreadConversations || accountConversations.length },
           { id: "favoris"  as Tab, label: "Favoris",      icon: <Heart className="w-4 h-4" />, badge: favoriteListings.length },
           { id: "profil"   as Tab, label: "Profil",       icon: <User className="w-4 h-4" />,  badge: 0 },
         ]).map(t => (
@@ -488,6 +633,7 @@ export default function Account() {
             accountListings.map(ad => {
             const listing = ad.listing;
             const cfg = STATUS_CONFIG[ad.status];
+            const listingMessageCount = accountMessages.filter((message) => message.listingId === listing.id).length;
 
             return (
               <div key={listing.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -607,7 +753,7 @@ export default function Account() {
                     {/* Stats row */}
                     <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50 flex-wrap">
                       <Stat icon={<Eye className="w-3 h-3 text-blue-400" />} value={ad.views.toLocaleString()} label="vues" />
-                      <Stat icon={<MessageCircle className="w-3 h-3 text-green-400" />} value={0} label="messages" />
+                      <Stat icon={<MessageCircle className="w-3 h-3 text-green-400" />} value={listingMessageCount} label="messages" />
                       <Stat icon={<Heart className="w-3 h-3 text-red-400" />} value={ad.favorites} label="favoris" />
                       {ad.status === "active" && (
                         <span className="text-[10px] text-gray-400 ml-auto flex items-center gap-1">
@@ -660,8 +806,49 @@ export default function Account() {
 
       {/* ── MESSAGES ── */}
       {tab === "messages" && (
-        <div className="space-y-2">
-          <EmptyState icon={<MessageCircle className="w-8 h-8 text-gray-300" />} text="Aucun message réel disponible pour le moment." />
+        <div className="space-y-3">
+          {accountMessagesQuery.isLoading ? (
+            Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-36 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+            ))
+          ) : accountMessagesQuery.isError ? (
+            <EmptyState icon={<AlertCircle className="w-8 h-8 text-red-300" />} text="Impossible de charger vos messages pour le moment." />
+          ) : accountMessages.length === 0 ? (
+            <EmptyState icon={<MessageCircle className="w-8 h-8 text-gray-300" />} text="Vous n'avez pas encore reçu de message vendeur." />
+          ) : (
+            accountMessages.map((message) => (
+              <MessageCard
+                key={message.id}
+                message={message}
+                onOpen={() => openMessage(message)}
+                onOpenListing={() => navigate(`/annonces/${message.listingId}`)}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── CONVERSATIONS ── */}
+      {tab === "conversations" && (
+        <div className="space-y-3">
+          {accountConversationsQuery.isLoading ? (
+            Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-36 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
+            ))
+          ) : accountConversationsQuery.isError ? (
+            <EmptyState icon={<AlertCircle className="w-8 h-8 text-red-300" />} text="Impossible de charger vos conversations pour le moment." />
+          ) : accountConversations.length === 0 ? (
+            <EmptyState icon={<MessageCircle className="w-8 h-8 text-gray-300" />} text="Aucune conversation pour le moment." />
+          ) : (
+            accountConversations.map((message) => (
+              <MessageCard
+                key={message.id}
+                message={message}
+                onOpen={() => openMessage(message)}
+                onOpenListing={() => navigate(`/annonces/${message.listingId}`)}
+              />
+            ))
+          )}
         </div>
       )}
 
@@ -1081,6 +1268,308 @@ export default function Account() {
           </div>
         </div>
       )}
+
+      {selectedMessageFresh !== null && (
+        <MessageDrawer
+          message={selectedMessageFresh}
+          error={messageActionError}
+          success={messageActionSuccess}
+          replyBody={replyBody}
+          currentUserId={accountUser?.id}
+          isMarkingRead={markMessageReadMutation.isPending}
+          isSendingReply={createMessageReplyMutation.isPending}
+          onClose={closeMessage}
+          onOpenListing={() => navigate(`/annonces/${selectedMessageFresh.listingId}`)}
+          onMarkRead={() => void handleMarkMessageRead(selectedMessageFresh.id)}
+          onReplyBodyChange={setReplyBody}
+          onSendReply={() => void handleSendMessageReply(selectedMessageFresh.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MessageCard({
+  message,
+  onOpen,
+  onOpenListing,
+}: {
+  message: ListingMessage;
+  onOpen: () => void;
+  onOpenListing: () => void;
+}) {
+  const preview = message.message.length > 160
+    ? `${message.message.slice(0, 160).trim()}…`
+    : message.message;
+
+  return (
+    <article className={`bg-white rounded-2xl border shadow-sm p-4 transition-all ${
+      message.readAt === null ? "border-green-100 ring-1 ring-green-50" : "border-gray-100"
+    }`}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onOpenListing}
+            className="flex items-center gap-1.5 text-sm font-extrabold text-gray-900 hover:text-[#1a7a3c] transition-colors text-left"
+          >
+            <Car className="w-4 h-4 text-[#1a7a3c] shrink-0" />
+            <span className="truncate">{message.listingTitle}</span>
+          </button>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-gray-500">
+            <span className="font-semibold text-gray-700">{message.name}</span>
+            {message.email && <span>{message.email}</span>}
+            <a href={`tel:${message.phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-1 text-[#1a7a3c] font-semibold hover:underline">
+              <Phone className="w-3 h-3" />
+              {message.phone}
+            </a>
+          </div>
+        </div>
+        <time className="text-[11px] text-gray-400 shrink-0" dateTime={message.createdAt}>
+          {formatMessageDate(message.createdAt)}
+        </time>
+      </div>
+
+      <p className="mt-3 text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+        {preview}
+      </p>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+        <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-full ${
+          message.readAt === null
+            ? "text-green-700 bg-green-50 border-green-100"
+            : "text-gray-500 bg-gray-50 border-gray-100"
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${message.readAt === null ? "bg-green-500" : "bg-gray-300"}`} />
+          {message.readAt === null ? "Non lu" : "Lu"}
+        </span>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#1a7a3c] border border-[#1a7a3c]/20 bg-[#f0faf4] px-3 py-1.5 rounded-lg hover:bg-[#e5f6ec] transition-colors"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          Lire
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function MessageDrawer({
+  message,
+  error,
+  success,
+  replyBody,
+  currentUserId,
+  isMarkingRead,
+  isSendingReply,
+  onClose,
+  onOpenListing,
+  onMarkRead,
+  onReplyBodyChange,
+  onSendReply,
+}: {
+  message: ListingMessage;
+  error: string | null;
+  success: string | null;
+  replyBody: string;
+  currentUserId: number | undefined;
+  isMarkingRead: boolean;
+  isSendingReply: boolean;
+  onClose: () => void;
+  onOpenListing: () => void;
+  onMarkRead: () => void;
+  onReplyBodyChange: (value: string) => void;
+  onSendReply: () => void;
+}) {
+  const mailtoUrl = buildMailtoUrl(message);
+  const whatsappUrl = buildWhatsappUrl(message);
+  const canMarkRead = currentUserId === message.sellerId;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        aria-label="Fermer le message"
+      />
+      <aside className="relative h-full w-full max-w-xl bg-white shadow-2xl overflow-y-auto p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-1 rounded-full mb-3 ${
+              message.readAt === null
+                ? "text-green-700 bg-green-50 border-green-100"
+                : "text-gray-500 bg-gray-50 border-gray-100"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${message.readAt === null ? "bg-green-500" : "bg-gray-300"}`} />
+              {message.readAt === null ? "Non lu" : "Lu"}
+            </span>
+            <h3 className="text-lg font-extrabold text-gray-900">Conversation</h3>
+            <button
+              type="button"
+              onClick={onOpenListing}
+              className="mt-1 text-sm font-semibold text-[#1a7a3c] hover:underline text-left"
+            >
+              {message.listingTitle}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
+            aria-label="Fermer"
+            title="Fermer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-100 text-red-700 rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        {success && (
+          <div className="mb-4 bg-green-50 border border-green-100 text-green-700 rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+          <InfoTile label="Contact" value={message.name} />
+          <InfoTile label="Date d'envoi" value={formatMessageDate(message.createdAt)} />
+          <InfoTile label="Email" value={message.email ?? "Non renseigné"} />
+          <InfoTile label="Téléphone" value={message.phone || "Non renseigné"} />
+        </div>
+
+        <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 mb-5">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Message complet</p>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{message.message}</p>
+        </div>
+
+        <div className="mb-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h4 className="text-sm font-extrabold text-gray-900">Réponses internes</h4>
+            <span className="text-[11px] text-gray-400">
+              {message.replies.length} réponse{message.replies.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          {message.replies.length === 0 ? (
+            <div className="border border-dashed border-gray-200 rounded-2xl p-4 text-center">
+              <MessageCircle className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+              <p className="text-xs text-gray-400 font-medium">Aucune réponse interne pour le moment.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {message.replies.map((reply) => (
+                <div key={reply.id} className="bg-[#f0faf4] border border-[#1a7a3c]/10 rounded-2xl p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-bold text-[#1a7a3c]">
+                      {reply.authorId === currentUserId
+                        ? "Vous"
+                        : reply.authorRole === "seller"
+                          ? "Vendeur"
+                          : reply.authorName}
+                    </p>
+                    <time className="text-[11px] text-gray-400" dateTime={reply.createdAt}>
+                      {formatMessageDate(reply.createdAt)}
+                    </time>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{reply.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form
+          className="bg-white border border-gray-100 rounded-2xl p-4 mb-5 shadow-sm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSendReply();
+          }}
+        >
+          <label className="block">
+            <span className="text-sm font-extrabold text-gray-900">Répondre au message</span>
+            <textarea
+              value={replyBody}
+              onChange={(event) => onReplyBodyChange(event.target.value)}
+              rows={5}
+              maxLength={2000}
+              placeholder="Écrivez votre réponse interne ici..."
+              className="mt-2 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+            />
+          </label>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+            <p className="text-[11px] text-gray-400">{replyBody.trim().length}/2000 caractères</p>
+            <button
+              type="submit"
+              disabled={isSendingReply}
+              className="inline-flex items-center justify-center gap-2 bg-[#1a7a3c] hover:bg-[#15632f] text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              <MessageCircle className="w-4 h-4" />
+              {isSendingReply ? "Envoi..." : "Envoyer la réponse"}
+            </button>
+          </div>
+        </form>
+
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Actions secondaires</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {canMarkRead && (
+            <button
+              type="button"
+              onClick={onMarkRead}
+              disabled={message.readAt !== null || isMarkingRead}
+              className="flex items-center justify-center gap-2 border border-gray-200 text-gray-700 font-bold py-2.5 rounded-xl text-sm hover:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {message.readAt !== null ? "Déjà lu" : isMarkingRead ? "Marquage..." : "Marquer comme lu"}
+            </button>
+          )}
+          {mailtoUrl ? (
+            <a
+              href={mailtoUrl}
+              className="flex items-center justify-center gap-2 bg-[#1a7a3c] hover:bg-[#15632f] text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Répondre par email
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-400 font-bold py-2.5 rounded-xl text-sm cursor-not-allowed"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Email indisponible
+            </button>
+          )}
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="sm:col-span-2 flex items-center justify-center gap-2 bg-[#25d366] hover:bg-[#1ebe5e] text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+            >
+              <Phone className="w-4 h-4" />
+              Répondre par WhatsApp
+            </a>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-gray-50 rounded-xl p-3">
+      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+      <p className="text-sm font-semibold text-gray-800 mt-0.5 break-words">{value}</p>
     </div>
   );
 }

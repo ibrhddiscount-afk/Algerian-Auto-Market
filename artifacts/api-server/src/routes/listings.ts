@@ -2,6 +2,12 @@ import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, or, type SQL }
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   AccountResponse,
+  AccountConversationsResponse,
+  AccountMessagesResponse,
+  CreateMessageReplyRequest,
+  CreateMessageReplyResponse,
+  CreateListingMessageRequest,
+  CreateListingMessageResponse,
   CreateListingRequest,
   CreateListingResponse,
   DeleteListingResponse,
@@ -12,6 +18,7 @@ import {
   ListFavoritesResponse,
   ListingDetailResponse,
   ListingsQuerySchema,
+  MarkListingMessageReadResponse,
   UpdateListingRequest,
   UpdateListingResponse,
 } from "@workspace/api-zod";
@@ -20,6 +27,8 @@ import {
   favoritesTable,
   listingPhotosTable,
   listingsTable,
+  messageRepliesTable,
+  messagesTable,
   usersTable,
 } from "@workspace/db";
 
@@ -29,6 +38,11 @@ const DEV_FALLBACK_EMAIL = "dev.user@autodz.local";
 type ListingRow = Awaited<ReturnType<typeof selectListings>>[number];
 type UserRow = typeof usersTable.$inferSelect;
 type ListingPhotoRow = typeof listingPhotosTable.$inferSelect;
+type MessageReplyRow = typeof messageRepliesTable.$inferSelect;
+type MessageRow = typeof messagesTable.$inferSelect & {
+  listingTitle: string;
+  replies: MessageReplyRow[];
+};
 type ListingUpdate = Partial<typeof listingsTable.$inferInsert>;
 
 interface AuthIdentity {
@@ -334,6 +348,11 @@ function parseListingId(value: string | undefined) {
   return Number.isInteger(id) && id > 0 ? id : undefined;
 }
 
+function parseMessageId(value: string | undefined) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
 function buildListingWhere(query: ReturnType<typeof ListingsQuerySchema.parse>) {
   const conditions: SQL[] = [];
   const fuels = splitQueryList(query.fuels, LISTING_FUELS);
@@ -561,6 +580,128 @@ function toAccountUser(user: UserRow, isDevFallback: boolean) {
   };
 }
 
+function toApiMessageReply(row: MessageReplyRow) {
+  return {
+    id: row.id,
+    messageId: row.messageId,
+    authorId: row.authorId,
+    authorRole: row.authorRole,
+    authorName: row.authorName,
+    authorEmail: row.authorEmail,
+    body: row.body,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function toApiMessage(row: MessageRow) {
+  return {
+    id: row.id,
+    listingId: row.listingId,
+    listingTitle: row.listingTitle,
+    senderId: row.senderId,
+    sellerId: row.sellerId,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    message: row.message,
+    createdAt: row.createdAt.toISOString(),
+    readAt: row.readAt?.toISOString() ?? null,
+    replies: row.replies.map(toApiMessageReply),
+  };
+}
+
+async function getRepliesByMessageIds(messageIds: number[]) {
+  if (messageIds.length === 0) return new Map<number, MessageReplyRow[]>();
+
+  const replies = await db
+    .select()
+    .from(messageRepliesTable)
+    .where(inArray(messageRepliesTable.messageId, messageIds))
+    .orderBy(asc(messageRepliesTable.createdAt), asc(messageRepliesTable.id));
+
+  const repliesByMessageId = new Map<number, MessageReplyRow[]>();
+
+  replies.forEach((reply) => {
+    const existingReplies = repliesByMessageId.get(reply.messageId) ?? [];
+    existingReplies.push(reply);
+    repliesByMessageId.set(reply.messageId, existingReplies);
+  });
+
+  return repliesByMessageId;
+}
+
+async function getAccountMessageRows(userId: number, messageId?: number) {
+  const conditions: SQL[] = [eq(messagesTable.sellerId, userId)];
+
+  if (messageId !== undefined) {
+    conditions.push(eq(messagesTable.id, messageId));
+  }
+
+  const rows = await db
+    .select({
+      id: messagesTable.id,
+      listingId: messagesTable.listingId,
+      listingTitle: listingsTable.title,
+      senderId: messagesTable.senderId,
+      sellerId: messagesTable.sellerId,
+      name: messagesTable.name,
+      email: messagesTable.email,
+      phone: messagesTable.phone,
+      message: messagesTable.message,
+      createdAt: messagesTable.createdAt,
+      readAt: messagesTable.readAt,
+    })
+    .from(messagesTable)
+    .innerJoin(listingsTable, eq(messagesTable.listingId, listingsTable.id))
+    .where(and(...conditions))
+    .orderBy(desc(messagesTable.createdAt), desc(messagesTable.id));
+
+  const repliesByMessageId = await getRepliesByMessageIds(rows.map((row) => row.id));
+
+  return rows.map((row) => ({
+    ...row,
+    replies: repliesByMessageId.get(row.id) ?? [],
+  }));
+}
+
+async function getAccountConversationRows(userId: number, messageId?: number) {
+  const participantWhere = or(
+    eq(messagesTable.sellerId, userId),
+    eq(messagesTable.senderId, userId),
+  );
+  const conditions: SQL[] = participantWhere ? [participantWhere] : [];
+
+  if (messageId !== undefined) {
+    conditions.push(eq(messagesTable.id, messageId));
+  }
+
+  const rows = await db
+    .select({
+      id: messagesTable.id,
+      listingId: messagesTable.listingId,
+      listingTitle: listingsTable.title,
+      senderId: messagesTable.senderId,
+      sellerId: messagesTable.sellerId,
+      name: messagesTable.name,
+      email: messagesTable.email,
+      phone: messagesTable.phone,
+      message: messagesTable.message,
+      createdAt: messagesTable.createdAt,
+      readAt: messagesTable.readAt,
+    })
+    .from(messagesTable)
+    .innerJoin(listingsTable, eq(messagesTable.listingId, listingsTable.id))
+    .where(and(...conditions))
+    .orderBy(desc(messagesTable.createdAt), desc(messagesTable.id));
+
+  const repliesByMessageId = await getRepliesByMessageIds(rows.map((row) => row.id));
+
+  return rows.map((row) => ({
+    ...row,
+    replies: repliesByMessageId.get(row.id) ?? [],
+  }));
+}
+
 async function buildListingDetailResponse(
   listingId: number,
   responseSchema: typeof ListingDetailResponse,
@@ -685,6 +826,147 @@ router.get("/favorites", async (req, res) => {
   res.json(data);
 });
 
+router.get("/account/messages", async (req, res) => {
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const userId = resolved.user.id;
+
+  const rows = await getAccountMessageRows(userId);
+
+  const unreadCount = rows.filter((row) => row.readAt === null).length;
+
+  const data = AccountMessagesResponse.parse({
+    items: rows.map(toApiMessage),
+    unreadCount,
+  });
+
+  res.json(data);
+});
+
+router.get("/account/conversations", async (req, res) => {
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const userId = resolved.user.id;
+
+  const rows = await getAccountConversationRows(userId);
+  const unreadCount = rows.filter(
+    (row) => row.sellerId === userId && row.readAt === null,
+  ).length;
+
+  const data = AccountConversationsResponse.parse({
+    items: rows.map(toApiMessage),
+    unreadCount,
+  });
+
+  res.json(data);
+});
+
+router.patch("/account/messages/:id/read", async (req, res) => {
+  const messageId = parseMessageId(req.params.id);
+
+  if (!messageId) {
+    res.status(400).json({ message: "Invalid message id" });
+    return;
+  }
+
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const userId = resolved.user.id;
+
+  const [message] = await getAccountMessageRows(userId, messageId);
+
+  if (!message) {
+    res.status(404).json({ message: "Message not found" });
+    return;
+  }
+
+  const readAt = message.readAt ?? new Date();
+
+  if (message.readAt === null) {
+    await db
+      .update(messagesTable)
+      .set({ readAt })
+      .where(eq(messagesTable.id, messageId));
+  }
+
+  const data = MarkListingMessageReadResponse.parse({
+    message: toApiMessage({ ...message, readAt }),
+  });
+
+  res.json(data);
+});
+
+router.post("/account/messages/:id/replies", async (req, res) => {
+  const messageId = parseMessageId(req.params.id);
+
+  if (!messageId) {
+    res.status(400).json({ message: "Invalid message id" });
+    return;
+  }
+
+  const parsed = CreateMessageReplyRequest.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Réponse invalide",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const user = resolved.user;
+
+  const [message] = await getAccountConversationRows(user.id, messageId);
+
+  if (!message) {
+    res.status(404).json({ message: "Message not found" });
+    return;
+  }
+
+  const isSeller = message.sellerId === user.id;
+  const isBuyer = message.senderId === user.id;
+
+  if (!isSeller && !isBuyer) {
+    res.status(403).json({ message: "Vous ne pouvez répondre qu'à vos conversations." });
+    return;
+  }
+
+  const readAt = message.readAt ?? new Date();
+
+  await db.transaction(async (tx) => {
+    await tx.insert(messageRepliesTable).values({
+      messageId,
+      authorId: user.id,
+      authorRole: isSeller ? "seller" : "buyer",
+      authorName: user.name,
+      authorEmail: user.email,
+      body: parsed.data.body,
+    });
+
+    if (isSeller && message.readAt === null) {
+      await tx
+        .update(messagesTable)
+        .set({ readAt })
+        .where(eq(messagesTable.id, messageId));
+    }
+  });
+
+  const [updatedMessage] = await getAccountConversationRows(user.id, messageId);
+
+  if (!updatedMessage) {
+    res.status(404).json({ message: "Message not found" });
+    return;
+  }
+
+  const data = CreateMessageReplyResponse.parse({
+    message: toApiMessage({ ...updatedMessage, readAt: updatedMessage.readAt ?? readAt }),
+  });
+
+  res.status(201).json(data);
+});
+
 router.get("/account", async (req, res) => {
   const resolved = await resolveRequestUserOrRespond(req, res);
   if (!resolved) return;
@@ -746,6 +1028,60 @@ router.get("/account", async (req, res) => {
   });
 
   res.json(data);
+});
+
+router.post("/listings/:id/messages", async (req, res) => {
+  const listingId = parseListingId(req.params.id);
+
+  if (!listingId) {
+    res.status(400).json({ message: "Invalid listing id" });
+    return;
+  }
+
+  const parsed = CreateListingMessageRequest.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Données invalides pour envoyer le message",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const [listing] = await selectListings()
+    .where(and(eq(listingsTable.id, listingId), eq(listingsTable.status, "active")))
+    .limit(1);
+
+  if (!listing) {
+    res.status(404).json({ message: "Listing not found" });
+    return;
+  }
+
+  const resolved = await resolveOptionalRequestUser(req);
+  const body = parsed.data;
+
+  const [createdMessage] = await db
+    .insert(messagesTable)
+    .values({
+      listingId,
+      senderId: resolved?.user.id,
+      sellerId: listing.sellerId,
+      name: body.name,
+      email: body.email ?? null,
+      phone: body.phone,
+      message: body.message,
+    })
+    .returning();
+
+  const data = CreateListingMessageResponse.parse({
+    message: toApiMessage({
+      ...createdMessage,
+      listingTitle: listing.title,
+      replies: [],
+    }),
+  });
+
+  res.status(201).json(data);
 });
 
 router.post("/listings", async (req, res) => {

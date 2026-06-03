@@ -182,6 +182,65 @@ export const DeleteListingResponse = zod.object({
   deleted: zod.boolean(),
 });
 
+export const CreateListingMessageRequest = zod.object({
+  name: zod.string().trim().min(2).max(160),
+  email: OptionalTrimmedString.pipe(zod.string().email().optional()),
+  phone: zod.string().trim().min(6).max(40),
+  message: zod.string().trim().min(10).max(2000),
+});
+
+export const MessageReplySchema = zod.object({
+  id: zod.number(),
+  messageId: zod.number(),
+  authorId: zod.number().nullable(),
+  authorRole: zod.string(),
+  authorName: zod.string(),
+  authorEmail: zod.string().nullable(),
+  body: zod.string(),
+  createdAt: zod.string(),
+});
+
+export const ListingMessageSchema = zod.object({
+  id: zod.number(),
+  listingId: zod.number(),
+  listingTitle: zod.string(),
+  senderId: zod.number().nullable(),
+  sellerId: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullable(),
+  phone: zod.string(),
+  message: zod.string(),
+  createdAt: zod.string(),
+  readAt: zod.string().nullable(),
+  replies: zod.array(MessageReplySchema),
+});
+
+export const CreateListingMessageResponse = zod.object({
+  message: ListingMessageSchema,
+});
+
+export const AccountMessagesResponse = zod.object({
+  items: zod.array(ListingMessageSchema),
+  unreadCount: zod.number(),
+});
+
+export const AccountConversationsResponse = zod.object({
+  items: zod.array(ListingMessageSchema),
+  unreadCount: zod.number(),
+});
+
+export const MarkListingMessageReadResponse = zod.object({
+  message: ListingMessageSchema,
+});
+
+export const CreateMessageReplyRequest = zod.object({
+  body: zod.string().trim().min(2).max(2000),
+});
+
+export const CreateMessageReplyResponse = zod.object({
+  message: ListingMessageSchema,
+});
+
 export const FavoriteUserParamsSchema = zod.object({
   userId: zod.coerce.number().int().positive().optional(),
 });

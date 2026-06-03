@@ -172,6 +172,61 @@ export const favoritesTable = pgTable(
   }),
 );
 
+export const messagesTable = pgTable(
+  "messages",
+  {
+    id: serial("id").primaryKey(),
+    listingId: integer("listing_id")
+      .notNull()
+      .references(() => listingsTable.id, { onDelete: "cascade" }),
+    senderId: integer("sender_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    sellerId: integer("seller_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 160 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    phone: varchar("phone", { length: 40 }).notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (table) => ({
+    listingIdx: index("messages_listing_id_idx").on(table.listingId),
+    sellerIdx: index("messages_seller_id_idx").on(table.sellerId),
+    senderIdx: index("messages_sender_id_idx").on(table.senderId),
+    createdAtIdx: index("messages_created_at_idx").on(table.createdAt),
+  }),
+);
+
+export const messageRepliesTable = pgTable(
+  "message_replies",
+  {
+    id: serial("id").primaryKey(),
+    messageId: integer("message_id")
+      .notNull()
+      .references(() => messagesTable.id, { onDelete: "cascade" }),
+    authorId: integer("author_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    authorRole: varchar("author_role", { length: 20 }).notNull().default("seller"),
+    authorName: varchar("author_name", { length: 160 }).notNull(),
+    authorEmail: varchar("author_email", { length: 255 }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    messageIdx: index("message_replies_message_id_idx").on(table.messageId),
+    authorIdx: index("message_replies_author_id_idx").on(table.authorId),
+    createdAtIdx: index("message_replies_created_at_idx").on(table.createdAt),
+  }),
+);
+
 export type User = typeof usersTable.$inferSelect;
 export type InsertUser = typeof usersTable.$inferInsert;
 export type Listing = typeof listingsTable.$inferSelect;
@@ -180,3 +235,7 @@ export type ListingPhoto = typeof listingPhotosTable.$inferSelect;
 export type InsertListingPhoto = typeof listingPhotosTable.$inferInsert;
 export type Favorite = typeof favoritesTable.$inferSelect;
 export type InsertFavorite = typeof favoritesTable.$inferInsert;
+export type Message = typeof messagesTable.$inferSelect;
+export type InsertMessage = typeof messagesTable.$inferInsert;
+export type MessageReply = typeof messageRepliesTable.$inferSelect;
+export type InsertMessageReply = typeof messageRepliesTable.$inferInsert;

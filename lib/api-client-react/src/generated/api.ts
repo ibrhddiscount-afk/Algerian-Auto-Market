@@ -18,7 +18,13 @@ import type {
 
 import type { HealthStatus } from "./api.schemas";
 import type {
+  AccountConversationsResponse,
+  AccountMessagesResponse,
   AccountResponse,
+  CreateMessageReplyRequest,
+  CreateMessageReplyResponse,
+  CreateListingMessageRequest,
+  CreateListingMessageResponse,
   CreateListingRequest,
   CreateListingResponse,
   DeleteListingResponse,
@@ -29,6 +35,7 @@ import type {
   ListingSort,
   ListListingsResponse,
   ListFavoritesResponse,
+  MarkListingMessageReadResponse,
   UpdateListingRequest,
   UpdateListingResponse,
 } from "./api.schemas";
@@ -167,6 +174,325 @@ export function useGetAccount<
   };
 
   return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns messages received by the current seller
+ * @summary Get account messages
+ */
+export const getGetAccountMessagesUrl = () => {
+  return `/api/account/messages`;
+};
+
+export const getAccountMessages = async (
+  options?: RequestInit,
+): Promise<AccountMessagesResponse> => {
+  return customFetch<AccountMessagesResponse>(getGetAccountMessagesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAccountMessagesQueryKey = () => {
+  return [`/api/account/messages`] as const;
+};
+
+export const getGetAccountMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAccountMessages>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountMessages>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAccountMessagesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountMessages>>> = ({
+    signal,
+  }) => getAccountMessages({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAccountMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAccountMessages>>
+>;
+export type GetAccountMessagesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get account messages
+ */
+export function useGetAccountMessages<
+  TData = Awaited<ReturnType<typeof getAccountMessages>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountMessages>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAccountMessagesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns conversations where the current user is seller or buyer
+ * @summary Get account conversations
+ */
+export const getGetAccountConversationsUrl = () => {
+  return `/api/account/conversations`;
+};
+
+export const getAccountConversations = async (
+  options?: RequestInit,
+): Promise<AccountConversationsResponse> => {
+  return customFetch<AccountConversationsResponse>(getGetAccountConversationsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAccountConversationsQueryKey = () => {
+  return [`/api/account/conversations`] as const;
+};
+
+export const getGetAccountConversationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAccountConversations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAccountConversationsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountConversations>>> = ({
+    signal,
+  }) => getAccountConversations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountConversations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAccountConversationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAccountConversations>>
+>;
+export type GetAccountConversationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get account conversations
+ */
+export function useGetAccountConversations<
+  TData = Awaited<ReturnType<typeof getAccountConversations>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountConversations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAccountConversationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export interface MarkListingMessageReadVariables {
+  messageId: number;
+}
+
+/**
+ * Marks a received message as read for the current seller
+ * @summary Mark message as read
+ */
+export const getMarkListingMessageReadUrl = (messageId: number) => {
+  return `/api/account/messages/${messageId}/read`;
+};
+
+export const markListingMessageRead = async (
+  messageId: number,
+  options?: RequestInit,
+): Promise<MarkListingMessageReadResponse> => {
+  return customFetch<MarkListingMessageReadResponse>(
+    getMarkListingMessageReadUrl(messageId),
+    {
+      ...options,
+      method: "PATCH",
+    },
+  );
+};
+
+export const getMarkListingMessageReadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markListingMessageRead>>,
+    TError,
+    MarkListingMessageReadVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markListingMessageRead>>,
+    MarkListingMessageReadVariables
+  > = ({ messageId }) => markListingMessageRead(messageId, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof markListingMessageRead>>,
+    TError,
+    MarkListingMessageReadVariables,
+    TContext
+  >;
+};
+
+export type MarkListingMessageReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markListingMessageRead>>
+>;
+export type MarkListingMessageReadMutationBody = MarkListingMessageReadVariables;
+export type MarkListingMessageReadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark message as read
+ */
+export function useMarkListingMessageRead<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markListingMessageRead>>,
+    TError,
+    MarkListingMessageReadVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markListingMessageRead>>,
+  TError,
+  MarkListingMessageReadVariables,
+  TContext
+> {
+  const mutationOptions = getMarkListingMessageReadMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+export interface CreateMessageReplyVariables {
+  messageId: number;
+  data: CreateMessageReplyRequest;
+}
+
+/**
+ * Adds an internal seller reply to a received message
+ * @summary Reply to message
+ */
+export const getCreateMessageReplyUrl = (messageId: number) => {
+  return `/api/account/messages/${messageId}/replies`;
+};
+
+export const createMessageReply = async (
+  messageId: number,
+  createMessageReplyRequest: CreateMessageReplyRequest,
+  options?: RequestInit,
+): Promise<CreateMessageReplyResponse> => {
+  return customFetch<CreateMessageReplyResponse>(
+    getCreateMessageReplyUrl(messageId),
+    {
+      ...options,
+      method: "POST",
+      body: JSON.stringify(createMessageReplyRequest),
+    },
+  );
+};
+
+export const getCreateMessageReplyMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMessageReply>>,
+    TError,
+    CreateMessageReplyVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMessageReply>>,
+    CreateMessageReplyVariables
+  > = ({ messageId, data }) => createMessageReply(messageId, data, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof createMessageReply>>,
+    TError,
+    CreateMessageReplyVariables,
+    TContext
+  >;
+};
+
+export type CreateMessageReplyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMessageReply>>
+>;
+export type CreateMessageReplyMutationBody = CreateMessageReplyVariables;
+export type CreateMessageReplyMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reply to message
+ */
+export function useCreateMessageReply<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMessageReply>>,
+    TError,
+    CreateMessageReplyVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMessageReply>>,
+  TError,
+  CreateMessageReplyVariables,
+  TContext
+> {
+  const mutationOptions = getCreateMessageReplyMutationOptions(options);
+
+  return useMutation(mutationOptions);
 }
 
 export interface ListListingsParams {
@@ -533,6 +859,93 @@ export function useDeleteListing<
   TContext
 > {
   const mutationOptions = getDeleteListingMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+export interface CreateListingMessageVariables {
+  listingId: number;
+  data: CreateListingMessageRequest;
+}
+
+/**
+ * Sends a contact message to the listing seller
+ * @summary Send listing message
+ */
+export const getCreateListingMessageUrl = (listingId: number) => {
+  return `/api/listings/${listingId}/messages`;
+};
+
+export const createListingMessage = async (
+  listingId: number,
+  createListingMessageRequest: CreateListingMessageRequest,
+  options?: RequestInit,
+): Promise<CreateListingMessageResponse> => {
+  return customFetch<CreateListingMessageResponse>(
+    getCreateListingMessageUrl(listingId),
+    {
+      ...options,
+      method: "POST",
+      body: JSON.stringify(createListingMessageRequest),
+    },
+  );
+};
+
+export const getCreateListingMessageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createListingMessage>>,
+    TError,
+    CreateListingMessageVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createListingMessage>>,
+    CreateListingMessageVariables
+  > = ({ listingId, data }) =>
+    createListingMessage(listingId, data, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof createListingMessage>>,
+    TError,
+    CreateListingMessageVariables,
+    TContext
+  >;
+};
+
+export type CreateListingMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createListingMessage>>
+>;
+export type CreateListingMessageMutationBody = CreateListingMessageVariables;
+export type CreateListingMessageMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send listing message
+ */
+export function useCreateListingMessage<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createListingMessage>>,
+    TError,
+    CreateListingMessageVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createListingMessage>>,
+  TError,
+  CreateListingMessageVariables,
+  TContext
+> {
+  const mutationOptions = getCreateListingMessageMutationOptions(options);
 
   return useMutation(mutationOptions);
 }

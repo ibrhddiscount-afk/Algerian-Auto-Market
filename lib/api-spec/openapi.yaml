@@ -39,6 +39,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AccountResponse"
+  /account/messages:
+    get:
+      operationId: getAccountMessages
+      tags: [listings]
+      summary: Get account messages
+      description: Returns messages received by the current seller
+      responses:
+        "200":
+          description: Account messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountMessagesResponse"
+  /account/conversations:
+    get:
+      operationId: getAccountConversations
+      tags: [listings]
+      summary: Get account conversations
+      description: Returns conversations where the current user is seller or buyer
+      responses:
+        "200":
+          description: Account conversations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountConversationsResponse"
+  /account/messages/{id}/read:
+    patch:
+      operationId: markListingMessageRead
+      tags: [listings]
+      summary: Mark message as read
+      description: Marks a received message as read for the current seller
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Read message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkListingMessageReadResponse"
+        "400":
+          description: Invalid message id
+        "404":
+          description: Message not found
+  /account/messages/{id}/replies:
+    post:
+      operationId: createMessageReply
+      tags: [listings]
+      summary: Reply to message
+      description: Adds an internal seller reply to a received message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageReplyRequest"
+      responses:
+        "201":
+          description: Message reply created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateMessageReplyResponse"
+        "400":
+          description: Invalid reply payload
+        "404":
+          description: Message not found
   /listings:
     get:
       operationId: listListings
@@ -190,6 +266,34 @@ paths:
                 $ref: "#/components/schemas/DeleteListingResponse"
         "403":
           description: Listing is not owned by the current user
+        "404":
+          description: Listing not found
+  /listings/{id}/messages:
+    post:
+      operationId: createListingMessage
+      tags: [listings]
+      summary: Send listing message
+      description: Sends a contact message to the listing seller
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateListingMessageRequest"
+      responses:
+        "201":
+          description: Created listing message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateListingMessageResponse"
+        "400":
+          description: Invalid message payload
         "404":
           description: Listing not found
   /listings/{id}/favorite:
@@ -519,6 +623,122 @@ components:
       properties:
         id: { type: integer }
         deleted: { type: boolean }
+    CreateListingMessageRequest:
+      type: object
+      required: [name, phone, message]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 6, maxLength: 40 }
+        message: { type: string, minLength: 10, maxLength: 2000 }
+    MessageReply:
+      type: object
+      required:
+        - id
+        - messageId
+        - authorId
+        - authorRole
+        - authorName
+        - authorEmail
+        - body
+        - createdAt
+      properties:
+        id: { type: integer }
+        messageId: { type: integer }
+        authorId:
+          type:
+            - integer
+            - "null"
+        authorRole: { type: string }
+        authorName: { type: string }
+        authorEmail:
+          type:
+            - string
+            - "null"
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+    ListingMessage:
+      type: object
+      required:
+        - id
+        - listingId
+        - listingTitle
+        - senderId
+        - sellerId
+        - name
+        - email
+        - phone
+        - message
+        - createdAt
+        - readAt
+        - replies
+      properties:
+        id: { type: integer }
+        listingId: { type: integer }
+        listingTitle: { type: string }
+        senderId:
+          type:
+            - integer
+            - "null"
+        sellerId: { type: integer }
+        name: { type: string }
+        email:
+          type:
+            - string
+            - "null"
+        phone: { type: string }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        readAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageReply"
+    CreateListingMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/ListingMessage"
+    AccountMessagesResponse:
+      type: object
+      required: [items, unreadCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingMessage"
+        unreadCount: { type: integer }
+    AccountConversationsResponse:
+      type: object
+      required: [items, unreadCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingMessage"
+        unreadCount: { type: integer }
+    MarkListingMessageReadResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/ListingMessage"
+    CreateMessageReplyRequest:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 2, maxLength: 2000 }
+    CreateMessageReplyResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/ListingMessage"
     FavoriteUserParams:
       type: object
       properties:
