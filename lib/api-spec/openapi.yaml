@@ -255,6 +255,18 @@ components:
         color: { type: string }
         verified: { type: boolean }
         badge: { type: string }
+        photos:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingPhoto"
+    ListingPhoto:
+      type: object
+      required: [url, position, isPrimary]
+      properties:
+        url: { type: string, format: uri }
+        alt: { type: string }
+        position: { type: integer, minimum: 0 }
+        isPrimary: { type: boolean }
     ListingDetail:
       type: object
       required:

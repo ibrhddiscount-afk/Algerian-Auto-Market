@@ -49,6 +49,7 @@ interface CarCardProps {
 export default function CarCard({ listing, size = "md" }: CarCardProps) {
   const [, navigate] = useLocation();
   const { favorited, isPending, toggleFavorite } = useFavoriteListing(listing.id);
+  const primaryPhoto = listing.photos?.[0];
 
   return (
     <div
@@ -57,7 +58,16 @@ export default function CarCard({ listing, size = "md" }: CarCardProps) {
     >
       {/* Image */}
       <div className={`relative overflow-hidden ${size === "sm" ? "h-36" : "h-44"}`}>
-        <CarIllustration color={listing.color} title={listing.title} />
+        {primaryPhoto ? (
+          <img
+            src={primaryPhoto.url}
+            alt={primaryPhoto.alt ?? listing.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <CarIllustration color={listing.color} title={listing.title} />
+        )}
 
         {/* Top row overlays */}
         <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-2.5">

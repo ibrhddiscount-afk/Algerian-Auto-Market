@@ -214,17 +214,26 @@ export default function Account() {
                 <div className="p-4 flex gap-4">
                   {/* Car illustration */}
                   <div
-                    className={`w-28 h-20 sm:w-36 sm:h-24 rounded-xl shrink-0 bg-gradient-to-br ${listing.color} flex items-center justify-center cursor-pointer`}
+                    className={`w-28 h-20 sm:w-36 sm:h-24 rounded-xl shrink-0 bg-gradient-to-br ${listing.color} flex items-center justify-center cursor-pointer overflow-hidden`}
                     onClick={() => navigate(`/annonces/${listing.id}`)}
                   >
-                    <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
-                      <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
-                      <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
-                      <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-                      <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-                      <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-                      <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-                    </svg>
+                    {listing.photos?.[0] ? (
+                      <img
+                        src={listing.photos[0].url}
+                        alt={listing.photos[0].alt ?? listing.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
+                        <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
+                        <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
+                        <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+                        <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+                        <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+                        <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+                      </svg>
+                    )}
                   </div>
 
                   {/* Content */}
@@ -528,21 +537,31 @@ export default function Account() {
 
 function FavoriteAccountCard({ listing, onOpen }: { listing: ApiListing; onOpen: () => void }) {
   const { isPending, toggleFavorite } = useFavoriteListing(listing.id);
+  const primaryPhoto = listing.photos?.[0];
 
   return (
     <div
       onClick={onOpen}
       className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden group cursor-pointer"
     >
-      <div className={`h-36 bg-gradient-to-br ${listing.color} flex items-center justify-center relative`}>
-        <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
-          <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
-          <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
-          <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-          <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-          <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-          <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-        </svg>
+      <div className={`h-36 bg-gradient-to-br ${listing.color} flex items-center justify-center relative overflow-hidden`}>
+        {primaryPhoto ? (
+          <img
+            src={primaryPhoto.url}
+            alt={primaryPhoto.alt ?? listing.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-75">
+            <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
+            <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
+            <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+            <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+            <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+            <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+          </svg>
+        )}
         <button
           onClick={(event) => { event.stopPropagation(); void toggleFavorite(); }}
           disabled={isPending}

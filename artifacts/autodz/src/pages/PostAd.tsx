@@ -1,7 +1,12 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCreateListing, type CreateListingRequest } from "@workspace/api-client-react";
+import { useCreateListing, type CreateListingPhoto, type CreateListingRequest } from "@workspace/api-client-react";
+import {
+  getMaxListingPhotos,
+  uploadListingPhotos,
+  validateListingPhoto,
+} from "@/lib/listing-photo-storage";
 import {
   ChevronRight, ChevronLeft, Check, Car, Truck, Zap,
   Upload, X, Plus, MapPin, Phone, User, Mail,
@@ -166,6 +171,8 @@ export default function PostAd() {
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createListing = useCreateListing();
@@ -205,7 +212,36 @@ export default function PostAd() {
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    const arr = Array.from(files).filter(f => f.type.startsWith("image/")).slice(0, 10 - form.photos.length);
+
+    setPhotoError(null);
+
+    const remainingSlots = getMaxListingPhotos() - form.photos.length;
+    if (remainingSlots <= 0) {
+      setPhotoError(`Vous pouvez ajouter jusqu'à ${getMaxListingPhotos()} photos maximum.`);
+      return;
+    }
+
+    const acceptedFiles: File[] = [];
+
+    for (const file of Array.from(files)) {
+      const validationError = validateListingPhoto(file);
+
+      if (validationError) {
+        setPhotoError(validationError);
+        continue;
+      }
+
+      if (acceptedFiles.length >= remainingSlots) {
+        setPhotoError(`Seulement ${remainingSlots} photo${remainingSlots > 1 ? "s" : ""} supplémentaire${remainingSlots > 1 ? "s" : ""} ajoutée${remainingSlots > 1 ? "s" : ""}.`);
+        break;
+      }
+
+      acceptedFiles.push(file);
+    }
+
+    if (acceptedFiles.length === 0) return;
+
+    const arr = acceptedFiles;
     set("photos", [...form.photos, ...arr]);
   }, [form.photos]);
 
@@ -214,7 +250,7 @@ export default function PostAd() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
 
-  const buildPayload = (): CreateListingRequest => {
+  const buildPayload = (photos?: CreateListingPhoto[]): CreateListingRequest => {
     const modele = form.modele === "Autre" ? form.autreModele.trim() : form.modele;
     const location = [form.ville.trim(), form.wilaya].filter(Boolean).join(", ");
 
@@ -239,6 +275,7 @@ export default function PostAd() {
       firstHand: form.premiereMain,
       dedouane: form.dedouane,
       options: form.options,
+      photos: photos && photos.length > 0 ? photos : undefined,
       seller: {
         name: form.nom.trim(),
         email: form.email.trim() || undefined,
@@ -256,7 +293,10 @@ export default function PostAd() {
     setSubmitError(null);
 
     try {
-      const data = await createListing.mutateAsync(buildPayload());
+      setIsUploadingPhotos(true);
+      const uploadedPhotos = await uploadListingPhotos(form.photos);
+      setIsUploadingPhotos(false);
+      const data = await createListing.mutateAsync(buildPayload(uploadedPhotos));
       queryClient.setQueryData([`/api/listings/${data.listing.id}`], data);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/account"] }),
@@ -265,12 +305,13 @@ export default function PostAd() {
       ]);
       navigate(`/annonces/${data.listing.id}`);
     } catch (error) {
+      setIsUploadingPhotos(false);
       setSubmitError(getSubmitErrorMessage(error));
     }
   };
 
   const modeles = form.marque ? (MODELES[form.marque] ?? DEFAULT_MODELES) : DEFAULT_MODELES;
-  const isSubmitting = createListing.isPending;
+  const isSubmitting = isUploadingPhotos || createListing.isPending;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -582,7 +623,12 @@ export default function PostAd() {
                 <p className="font-bold text-gray-700">Glisser-déposer vos photos ici</p>
                 <p className="text-sm text-gray-400 mt-0.5">ou <span className="text-[#1a7a3c] font-semibold">cliquer pour parcourir</span></p>
               </div>
-              <p className="text-xs text-gray-400">JPG, PNG · Max 10 photos · Max 5 Mo par photo</p>
+            <p className="text-xs text-gray-400">JPG, PNG · Max 10 photos · Max 5 Mo par photo</p>
+              {photoError && (
+                <p className="flex items-center gap-1 text-xs font-semibold text-red-500">
+                  <AlertCircle className="w-3 h-3" /> {photoError}
+                </p>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -614,7 +660,9 @@ export default function PostAd() {
                         </div>
                       )}
                       <button
-                        onClick={e => { e.stopPropagation(); set("photos", form.photos.filter((_, j) => j !== i)); }}
+                        onClick={e => { e.stopPropagation(); setPhotoError(null); set("photos", form.photos.filter((_, j) => j !== i)); }}
+                        aria-label={`Retirer la photo ${i + 1}`}
+                        title={`Retirer la photo ${i + 1}`}
                         className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
                       >
                         <X className="w-3 h-3 text-white" />
@@ -766,7 +814,7 @@ export default function PostAd() {
               disabled={isSubmitting}
               className="flex items-center gap-2 px-8 py-2.5 bg-[#1a7a3c] hover:bg-[#15632f] disabled:bg-gray-300 disabled:shadow-none text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-[#1a7a3c]/30"
             >
-              <CheckCircle className="w-4 h-4" /> {isSubmitting ? "Publication..." : "Publier mon annonce"}
+              <CheckCircle className="w-4 h-4" /> {isUploadingPhotos ? "Upload des photos..." : isSubmitting ? "Publication..." : "Publier mon annonce"}
             </button>
           )}
         </div>

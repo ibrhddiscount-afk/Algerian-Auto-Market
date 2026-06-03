@@ -25,6 +25,7 @@ const DEV_FALLBACK_EMAIL = "dev.user@autodz.local";
 
 type ListingRow = Awaited<ReturnType<typeof selectListings>>[number];
 type UserRow = typeof usersTable.$inferSelect;
+type ListingPhotoRow = typeof listingPhotosTable.$inferSelect;
 
 interface AuthIdentity {
   sub?: string;
@@ -392,7 +393,53 @@ function selectListings() {
     .innerJoin(usersTable, eq(listingsTable.sellerId, usersTable.id));
 }
 
-function toApiListing(row: ListingRow) {
+function toApiPhoto(row: ListingPhotoRow) {
+  return {
+    url: row.url,
+    ...(row.alt ? { alt: row.alt } : {}),
+    position: row.position,
+    isPrimary: row.isPrimary,
+  };
+}
+
+function sortPhotos(photos: ListingPhotoRow[]) {
+  return [...photos].sort((left, right) => {
+    if (left.isPrimary !== right.isPrimary) return left.isPrimary ? -1 : 1;
+    return left.position - right.position || left.id - right.id;
+  });
+}
+
+async function getPhotosByListingIds(listingIds: number[]) {
+  if (listingIds.length === 0) return new Map<number, ListingPhotoRow[]>();
+
+  const photos = await db
+    .select()
+    .from(listingPhotosTable)
+    .where(inArray(listingPhotosTable.listingId, listingIds))
+    .orderBy(
+      asc(listingPhotosTable.listingId),
+      desc(listingPhotosTable.isPrimary),
+      asc(listingPhotosTable.position),
+      asc(listingPhotosTable.id),
+    );
+
+  const photosByListingId = new Map<number, ListingPhotoRow[]>();
+
+  for (const photo of photos) {
+    const listingPhotos = photosByListingId.get(photo.listingId) ?? [];
+    listingPhotos.push(photo);
+    photosByListingId.set(photo.listingId, listingPhotos);
+  }
+
+  return photosByListingId;
+}
+
+function toApiListing(
+  row: ListingRow,
+  photosByListingId = new Map<number, ListingPhotoRow[]>(),
+) {
+  const photos = sortPhotos(photosByListingId.get(row.id) ?? []).map(toApiPhoto);
+
   return {
     id: row.id,
     title: row.title,
@@ -410,6 +457,7 @@ function toApiListing(row: ListingRow) {
     color: row.color,
     verified: row.verified,
     ...(row.badge ? { badge: row.badge } : {}),
+    ...(photos.length > 0 ? { photos } : {}),
   };
 }
 
@@ -503,8 +551,10 @@ router.get("/listings", async (req, res) => {
     .limit(pageSize)
     .offset((safePage - 1) * pageSize);
 
+  const photosByListingId = await getPhotosByListingIds(rows.map((row) => row.id));
+
   const data = ListListingsResponse.parse({
-    items: rows.map(toApiListing),
+    items: rows.map((row) => toApiListing(row, photosByListingId)),
     total,
     page: safePage,
     pageSize,
@@ -532,6 +582,7 @@ router.get("/favorites", async (req, res) => {
     ? await selectListings().where(inArray(listingsTable.id, listingIds))
     : [];
   const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const photosByListingId = await getPhotosByListingIds(rows.map((row) => row.id));
   const orderedRows = listingIds
     .map((listingId) => rowsById.get(listingId))
     .filter((row): row is ListingRow => Boolean(row));
@@ -539,7 +590,7 @@ router.get("/favorites", async (req, res) => {
   const data = ListFavoritesResponse.parse({
     userId,
     listingIds,
-    items: orderedRows.map(toApiListing),
+    items: orderedRows.map((row) => toApiListing(row, photosByListingId)),
   });
 
   res.json(data);
@@ -554,6 +605,10 @@ router.get("/account", async (req, res) => {
     .where(eq(listingsTable.sellerId, user.id))
     .orderBy(desc(listingsTable.createdAt), desc(listingsTable.id));
 
+  const listingPhotosById = await getPhotosByListingIds(
+    listingRows.map((row) => row.id),
+  );
+
   const accountListings = await Promise.all(
     listingRows.map(async (row) => {
       const [{ total: favoriteCount }] = await db
@@ -562,7 +617,7 @@ router.get("/account", async (req, res) => {
         .where(eq(favoritesTable.listingId, row.id));
 
       return {
-        listing: toApiListing(row),
+        listing: toApiListing(row, listingPhotosById),
         status: "active" as const,
         views: row.views,
         favorites: favoriteCount,
@@ -583,6 +638,9 @@ router.get("/account", async (req, res) => {
     ? await selectListings().where(inArray(listingsTable.id, favoriteIds))
     : [];
   const favoritesById = new Map(favorites.map((listing) => [listing.id, listing]));
+  const favoritePhotosById = await getPhotosByListingIds(
+    favorites.map((listing) => listing.id),
+  );
 
   const data = AccountResponse.parse({
     user: toAccountUser(user, isDevFallback),
@@ -590,7 +648,7 @@ router.get("/account", async (req, res) => {
     favorites: favoriteIds
       .map((listingId) => favoritesById.get(listingId))
       .filter((listing): listing is ListingRow => Boolean(listing))
-      .map(toApiListing),
+      .map((listing) => toApiListing(listing, favoritePhotosById)),
   });
 
   res.json(data);
@@ -683,9 +741,11 @@ router.post("/listings", async (req, res) => {
     .from(listingsTable)
     .where(eq(listingsTable.sellerId, listing.sellerId));
 
+  const photosByListingId = await getPhotosByListingIds([listing.id]);
+
   try {
     const data = CreateListingResponse.parse({
-      listing: toApiListing(listing),
+      listing: toApiListing(listing, photosByListingId),
       detail: toApiDetail(listing, sellerTotalAds),
       similar: [],
     });
@@ -824,11 +884,15 @@ router.get("/listings/:id", async (req, res) => {
     )
     .orderBy(desc(listingsTable.createdAt), desc(listingsTable.id))
     .limit(4);
+  const photosByListingId = await getPhotosByListingIds([
+    listing.id,
+    ...similarRows.map((row) => row.id),
+  ]);
 
   const data = ListingDetailResponse.parse({
-    listing: toApiListing(listing),
+    listing: toApiListing(listing, photosByListingId),
     detail: toApiDetail(listing, sellerTotalAds),
-    similar: similarRows.map(toApiListing),
+    similar: similarRows.map((row) => toApiListing(row, photosByListingId)),
   });
 
   res.json(data);

@@ -572,21 +572,31 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
 function ListRow({ listing }: { listing: Listing }) {
   const [, navigate] = useLocation();
   const { favorited, isPending, toggleFavorite } = useFavoriteListing(listing.id);
+  const primaryPhoto = listing.photos?.[0];
 
   return (
     <div
       onClick={() => navigate(`/annonces/${listing.id}`)}
       className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex group cursor-pointer"
     >
-      <div className={`w-40 sm:w-52 shrink-0 bg-gradient-to-br ${listing.color} flex items-center justify-center`}>
-        <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-70">
-          <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
-          <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
-          <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-          <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
-          <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-          <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
-        </svg>
+      <div className={`w-40 sm:w-52 shrink-0 bg-gradient-to-br ${listing.color} flex items-center justify-center overflow-hidden`}>
+        {primaryPhoto ? (
+          <img
+            src={primaryPhoto.url}
+            alt={primaryPhoto.alt ?? listing.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <svg viewBox="0 0 120 60" fill="none" className="w-4/5 h-4/5 opacity-70">
+            <rect x="10" y="28" width="100" height="22" rx="5" fill="rgba(255,255,255,0.45)" />
+            <path d="M18 28 Q38 10 60 10 Q85 10 104 28" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" fill="rgba(255,255,255,0.25)" />
+            <circle cx="28" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+            <circle cx="92" cy="50" r="8" fill="rgba(0,0,0,0.45)" />
+            <circle cx="28" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+            <circle cx="92" cy="50" r="4" fill="rgba(255,255,255,0.35)" />
+          </svg>
+        )}
       </div>
       <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
         <div className="flex items-start justify-between gap-2">

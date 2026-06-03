@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, Heart, Share2, Phone, MessageCircle, CheckCircle,
@@ -74,12 +74,21 @@ export default function ListingDetail() {
   const listing = data?.listing;
   const detail = data?.detail;
   const similar = data?.similar ?? [];
+  const photos = listing?.photos ?? [];
 
   const [slide, setSlide] = useState(0);
   const { favorited, isPending: favoritePending, toggleFavorite } = useFavoriteListing(id);
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
-  const SLIDES = 5;
+  const slideCount = photos.length || 5;
+
+  useEffect(() => {
+    setSlide(0);
+  }, [id]);
+
+  useEffect(() => {
+    if (slide >= slideCount) setSlide(0);
+  }, [slide, slideCount]);
 
   if (isLoading) {
     return (
@@ -153,11 +162,19 @@ export default function ListingDetail() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Main slide */}
             <div className="relative h-72 sm:h-96 select-none">
-              <GallerySlide color={listing.color} title={listing.title} angle={slide} />
+              {photos[slide] ? (
+                <img
+                  src={photos[slide].url}
+                  alt={photos[slide].alt ?? listing.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <GallerySlide color={listing.color} title={listing.title} angle={slide} />
+              )}
 
               {/* Arrows */}
               <button
-                onClick={() => setSlide(s => (s - 1 + SLIDES) % SLIDES)}
+                onClick={() => setSlide(s => (s - 1 + slideCount) % slideCount)}
                 aria-label="Afficher la photo précédente"
                 title="Photo précédente"
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/80 hover:bg-white rounded-full shadow flex items-center justify-center transition-all"
@@ -165,7 +182,7 @@ export default function ListingDetail() {
                 <ChevronLeft className="w-5 h-5 text-gray-700" />
               </button>
               <button
-                onClick={() => setSlide(s => (s + 1) % SLIDES)}
+                onClick={() => setSlide(s => (s + 1) % slideCount)}
                 aria-label="Afficher la photo suivante"
                 title="Photo suivante"
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/80 hover:bg-white rounded-full shadow flex items-center justify-center transition-all"
@@ -175,7 +192,7 @@ export default function ListingDetail() {
 
               {/* Counter */}
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                {slide + 1} / {SLIDES}
+                {slide + 1} / {slideCount}
               </div>
 
               {/* Badges */}
@@ -196,7 +213,7 @@ export default function ListingDetail() {
 
             {/* Thumbnails */}
             <div className="flex gap-2 p-3 bg-gray-50 border-t border-gray-100">
-              {Array.from({ length: SLIDES }, (_, i) => (
+              {Array.from({ length: slideCount }, (_, i) => (
                 <button
                   key={i}
                   onClick={() => setSlide(i)}
@@ -206,7 +223,16 @@ export default function ListingDetail() {
                     slide === i ? "border-[#1a7a3c] shadow-md" : "border-transparent opacity-60 hover:opacity-90"
                   }`}
                 >
-                  <GallerySlide color={listing.color} title={listing.title} angle={i} />
+                  {photos[i] ? (
+                    <img
+                      src={photos[i].url}
+                      alt={photos[i].alt ?? `${listing.title} photo ${i + 1}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <GallerySlide color={listing.color} title={listing.title} angle={i} />
+                  )}
                 </button>
               ))}
             </div>

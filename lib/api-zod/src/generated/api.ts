@@ -22,6 +22,13 @@ export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
 
+export const ListingPhotoSchema = zod.object({
+  url: zod.string().url(),
+  alt: OptionalTrimmedString,
+  position: zod.number().int().min(0),
+  isPrimary: zod.boolean(),
+});
+
 export const ListingSchema = zod.object({
   id: zod.number(),
   title: zod.string(),
@@ -39,6 +46,7 @@ export const ListingSchema = zod.object({
   color: zod.string(),
   verified: zod.boolean(),
   badge: zod.string().optional(),
+  photos: zod.array(ListingPhotoSchema).optional(),
 });
 
 export const ListingDetailSchema = zod.object({

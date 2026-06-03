@@ -25,6 +25,13 @@ export type ListingSort =
   | "km_asc"
   | "annee_desc";
 
+export interface ListingPhoto {
+  url: string;
+  alt?: string;
+  position: number;
+  isPrimary: boolean;
+}
+
 export interface Listing {
   id: number;
   title: string;
@@ -42,6 +49,7 @@ export interface Listing {
   color: string;
   verified: boolean;
   badge?: string;
+  photos?: ListingPhoto[];
 }
 
 export interface ListingDetail {
