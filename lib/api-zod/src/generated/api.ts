@@ -29,6 +29,8 @@ export const ListingPhotoSchema = zod.object({
   isPrimary: zod.boolean(),
 });
 
+export const ListingStatusSchema = zod.enum(["active", "draft", "sold"]);
+
 export const ListingSchema = zod.object({
   id: zod.number(),
   title: zod.string(),
@@ -46,6 +48,8 @@ export const ListingSchema = zod.object({
   color: zod.string(),
   verified: zod.boolean(),
   badge: zod.string().optional(),
+  status: ListingStatusSchema,
+  description: zod.string(),
   photos: zod.array(ListingPhotoSchema).optional(),
 });
 
@@ -160,6 +164,23 @@ export const CreateListingRequest = zod.object({
 
 export const CreateListingResponse = ListingDetailResponse;
 
+export const UpdateListingRequest = zod.object({
+  title: zod.string().trim().min(1).max(180).optional(),
+  priceRaw: zod.coerce.number().int().positive().max(1_000_000_000).optional(),
+  kmRaw: zod.coerce.number().int().min(0).max(2_000_000).optional(),
+  wilaya: zod.string().trim().min(1).max(80).optional(),
+  location: zod.string().trim().min(1).max(160).optional(),
+  description: zod.string().trim().max(1000).optional(),
+  status: ListingStatusSchema.optional(),
+});
+
+export const UpdateListingResponse = ListingDetailResponse;
+
+export const DeleteListingResponse = zod.object({
+  id: zod.number(),
+  deleted: zod.boolean(),
+});
+
 export const FavoriteUserParamsSchema = zod.object({
   userId: zod.coerce.number().int().positive().optional(),
 });
@@ -199,7 +220,7 @@ export const AccountUserSchema = zod.object({
 
 export const AccountListingSchema = zod.object({
   listing: ListingSchema,
-  status: zod.enum(["active", "paused", "expired", "sold"]),
+  status: ListingStatusSchema,
   views: zod.number(),
   favorites: zod.number(),
   postedDaysAgo: zod.number(),

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   User, Star, Eye, MessageCircle, Heart,
@@ -8,28 +9,68 @@ import {
 } from "lucide-react";
 import {
   useGetAccount,
+  useDeleteListing,
   useListFavorites,
+  useUpdateListing,
   type AccountListing,
   type Listing as ApiListing,
+  type ListingStatus,
+  type UpdateListingRequest,
 } from "@workspace/api-client-react";
 import { useFavoriteListing } from "@/hooks/use-favorite-listing";
 
 type Tab = "annonces" | "messages" | "favoris" | "profil";
 type AdStatus = AccountListing["status"];
+type EditListingForm = {
+  title: string;
+  priceRaw: string;
+  kmRaw: string;
+  wilaya: string;
+  location: string;
+  description: string;
+  status: ListingStatus;
+};
 
 const STATUS_CONFIG: Record<AdStatus, { label: string; color: string; dot: string }> = {
   active:  { label: "Active",  color: "bg-green-100 text-green-700",  dot: "bg-green-500"  },
-  paused:  { label: "Pausée",  color: "bg-yellow-100 text-yellow-700",dot: "bg-yellow-500" },
-  expired: { label: "Expirée", color: "bg-gray-100 text-gray-500",    dot: "bg-gray-400"   },
+  draft:   { label: "Brouillon", color: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
   sold:    { label: "Vendue",  color: "bg-blue-100 text-blue-700",    dot: "bg-blue-500"   },
 };
 
+const ACCOUNT_QUERY_KEY = ["/api/account"] as const;
+const LISTINGS_QUERY_KEY = ["/api/listings"] as const;
+const FAVORITES_QUERY_KEY = ["/api/favorites"] as const;
+
+function getApiErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "Une erreur est survenue. Réessayez dans un instant.";
+}
+
 export default function Account() {
+  const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("annonces");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingAd, setEditingAd] = useState<AccountListing | null>(null);
+  const [editForm, setEditForm] = useState<EditListingForm>({
+    title: "",
+    priceRaw: "",
+    kmRaw: "",
+    wilaya: "",
+    location: "",
+    description: "",
+    status: "active",
+  });
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const accountQuery = useGetAccount();
   const favoritesQuery = useListFavorites();
+  const updateListingMutation = useUpdateListing();
+  const deleteListingMutation = useDeleteListing();
   const account = accountQuery.data;
   const accountListings = account?.listings ?? [];
   const favoriteListings = favoritesQuery.data?.items ?? [];
@@ -53,6 +94,88 @@ export default function Account() {
   const totalViews = accountListings.reduce((s, a) => s + a.views, 0);
   const totalMsgs  = 0;
   const totalFavs  = accountListings.reduce((s, a) => s + a.favorites, 0);
+  const updatingListingId = updateListingMutation.isPending
+    ? updateListingMutation.variables?.listingId
+    : undefined;
+
+  const invalidateListingQueries = async (listingId?: number) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: LISTINGS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: FAVORITES_QUERY_KEY }),
+      listingId
+        ? queryClient.invalidateQueries({ queryKey: [`/api/listings/${listingId}`] })
+        : Promise.resolve(),
+    ]);
+  };
+
+  const openEditModal = (ad: AccountListing) => {
+    setActionError(null);
+    setActionSuccess(null);
+    setEditingAd(ad);
+    setEditForm({
+      title: ad.listing.title,
+      priceRaw: String(ad.listing.priceRaw),
+      kmRaw: String(ad.listing.kmRaw),
+      wilaya: ad.listing.wilaya,
+      location: ad.listing.location,
+      description: ad.listing.description,
+      status: ad.status,
+    });
+  };
+
+  const handleUpdateListing = async (
+    listingId: number,
+    data: UpdateListingRequest,
+    successMessage: string,
+  ) => {
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      await updateListingMutation.mutateAsync({ listingId, data });
+      await invalidateListingQueries(listingId);
+      setActionSuccess(successMessage);
+      setEditingAd(null);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingAd) return;
+
+    await handleUpdateListing(
+      editingAd.listing.id,
+      {
+        title: editForm.title,
+        priceRaw: Number(editForm.priceRaw),
+        kmRaw: Number(editForm.kmRaw),
+        wilaya: editForm.wilaya,
+        location: editForm.location,
+        description: editForm.description,
+        status: editForm.status,
+      },
+      "Annonce modifiée avec succès.",
+    );
+  };
+
+  const handleDeleteListing = async () => {
+    if (deletingId === null) return;
+
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      await deleteListingMutation.mutateAsync({ listingId: deletingId });
+      await invalidateListingQueries(deletingId);
+      setActionSuccess("Annonce supprimée avec succès.");
+      setDeletingId(null);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
@@ -181,6 +304,18 @@ export default function Account() {
       {/* ── MES ANNONCES ── */}
       {tab === "annonces" && (
         <div className="space-y-3">
+          {actionError && (
+            <div className="bg-red-50 border border-red-100 text-red-700 rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          {actionSuccess && (
+            <div className="bg-green-50 border border-green-100 text-green-700 rounded-2xl px-4 py-3 text-sm font-medium flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{actionSuccess}</span>
+            </div>
+          )}
           {accountQuery.isLoading ? (
             Array.from({ length: 3 }, (_, index) => (
               <div key={index} className="h-40 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
@@ -196,18 +331,10 @@ export default function Account() {
 
             return (
               <div key={listing.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {ad.status === "expired" && (
-                  <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center gap-2">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <p className="text-xs text-amber-700 font-medium">Cette annonce a expiré. Renouvelez-la pour qu'elle soit à nouveau visible.</p>
-                    <button
-                      disabled
-                      aria-disabled="true"
-                      title="Renouvellement bientôt disponible"
-                      className="ml-auto text-xs font-bold text-amber-600 whitespace-nowrap cursor-not-allowed"
-                    >
-                      Renouveler · Bientôt
-                    </button>
+                {ad.status === "draft" && (
+                  <div className="bg-gray-50 border-b border-gray-100 px-4 py-2 flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    <p className="text-xs text-gray-600 font-medium">Cette annonce est en brouillon. Réactivez-la pour la publier.</p>
                   </div>
                 )}
 
@@ -267,34 +394,47 @@ export default function Account() {
 
                       {/* Action buttons */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {(ad.status === "active" || ad.status === "paused") && (
-                          <>
-                            <button
-                              onClick={() => navigate(`/annonces/${listing.id}`)}
-                              className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors"
-                              title="Voir l'annonce"
-                              aria-label={`Voir l'annonce ${listing.title}`}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              disabled
-                              aria-disabled="true"
-                              className="p-2 text-gray-300 cursor-not-allowed rounded-lg transition-colors"
-                              title="Modification d'annonce bientôt disponible"
-                              aria-label={`Modifier l'annonce ${listing.title} — bientôt disponible`}
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {ad.status === "expired" && (
-                          <button className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors" title="Renouveler" aria-label={`Renouveler l'annonce ${listing.title}`}>
+                        <button
+                          onClick={() => navigate(`/annonces/${listing.id}`)}
+                          className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors"
+                          title="Voir l'annonce"
+                          aria-label={`Voir l'annonce ${listing.title}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openEditModal(ad)}
+                          disabled={updatingListingId === listing.id}
+                          className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Modifier"
+                          aria-label={`Modifier l'annonce ${listing.title}`}
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        {ad.status === "active" ? (
+                          <button
+                            onClick={() => void handleUpdateListing(listing.id, { status: "sold" }, "Annonce marquée comme vendue.")}
+                            disabled={updatingListingId === listing.id}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Marquer comme vendu"
+                            aria-label={`Marquer l'annonce ${listing.title} comme vendue`}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => void handleUpdateListing(listing.id, { status: "active" }, "Annonce réactivée avec succès.")}
+                            disabled={updatingListingId === listing.id}
+                            className="p-2 text-gray-400 hover:text-[#1a7a3c] hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Réactiver"
+                            aria-label={`Réactiver l'annonce ${listing.title}`}
+                          >
                             <RefreshCw className="w-4 h-4" />
                           </button>
                         )}
                         <button
                           onClick={() => setDeletingId(listing.id)}
+                          disabled={deleteListingMutation.isPending}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           title="Supprimer"
                           aria-label={`Supprimer l'annonce ${listing.title}`}
@@ -317,7 +457,7 @@ export default function Account() {
                       )}
                       {ad.status === "sold" && (
                         <span className="text-[10px] text-blue-600 font-bold ml-auto flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Vendue il y a {ad.postedDaysAgo - 25}j
+                          <CheckCircle className="w-3 h-3" /> Marquée vendue
                         </span>
                       )}
                     </div>
@@ -500,10 +640,142 @@ export default function Account() {
         </div>
       )}
 
+      {/* Edit listing modal */}
+      {editingAd !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setEditingAd(null)}
+            aria-label="Fermer la modification"
+          />
+          <form
+            onSubmit={(event) => void handleEditSubmit(event)}
+            className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg">Modifier l'annonce</h3>
+                <p className="text-sm text-gray-500 mt-1">Mettez à jour les informations principales de votre annonce.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAd(null)}
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg"
+                aria-label="Fermer"
+                title="Fermer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="sm:col-span-2">
+                <span className="text-xs font-bold text-gray-600">Titre</span>
+                <input
+                  value={editForm.title}
+                  onChange={(event) => setEditForm((form) => ({ ...form, title: event.target.value }))}
+                  required
+                  maxLength={180}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-bold text-gray-600">Prix (DZD)</span>
+                <input
+                  type="number"
+                  value={editForm.priceRaw}
+                  onChange={(event) => setEditForm((form) => ({ ...form, priceRaw: event.target.value }))}
+                  required
+                  min={1}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-bold text-gray-600">Kilométrage</span>
+                <input
+                  type="number"
+                  value={editForm.kmRaw}
+                  onChange={(event) => setEditForm((form) => ({ ...form, kmRaw: event.target.value }))}
+                  required
+                  min={0}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-bold text-gray-600">Wilaya</span>
+                <input
+                  value={editForm.wilaya}
+                  onChange={(event) => setEditForm((form) => ({ ...form, wilaya: event.target.value }))}
+                  required
+                  maxLength={80}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-bold text-gray-600">Localisation</span>
+                <input
+                  value={editForm.location}
+                  onChange={(event) => setEditForm((form) => ({ ...form, location: event.target.value }))}
+                  required
+                  maxLength={160}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="text-xs font-bold text-gray-600">Statut</span>
+                <select
+                  value={editForm.status}
+                  onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value as ListingStatus }))}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                >
+                  <option value="active">Active</option>
+                  <option value="draft">Brouillon</option>
+                  <option value="sold">Vendue</option>
+                </select>
+              </label>
+              <label className="sm:col-span-2">
+                <span className="text-xs font-bold text-gray-600">Description</span>
+                <textarea
+                  value={editForm.description}
+                  onChange={(event) => setEditForm((form) => ({ ...form, description: event.target.value }))}
+                  rows={5}
+                  maxLength={1000}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a7a3c]/20 focus:border-[#1a7a3c]"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setEditingAd(null)}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={updateListingMutation.isPending}
+                className="flex-1 py-2.5 bg-[#1a7a3c] hover:bg-[#15632f] text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-60"
+              >
+                {updateListingMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Delete confirm modal */}
       {deletingId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setDeletingId(null)} />
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setDeletingId(null)}
+            aria-label="Fermer la confirmation"
+            disabled={deleteListingMutation.isPending}
+          />
           <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
@@ -517,15 +789,17 @@ export default function Account() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingId(null)}
+                disabled={deleteListingMutation.isPending}
                 className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
               >
                 Annuler
               </button>
               <button
-                onClick={() => setDeletingId(null)}
-                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-colors"
+                onClick={() => void handleDeleteListing()}
+                disabled={deleteListingMutation.isPending}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-60"
               >
-                Supprimer
+                {deleteListingMutation.isPending ? "Suppression..." : "Supprimer"}
               </button>
             </div>
           </div>
@@ -588,7 +862,7 @@ function FavoriteAccountCard({ listing, onOpen }: { listing: ApiListing; onOpen:
   );
 }
 
-function Stat({ icon, value, label }: { icon: React.ReactNode; value: string | number; label: string }) {
+function Stat({ icon, value, label }: { icon: ReactNode; value: string | number; label: string }) {
   return (
     <span className="flex items-center gap-1 text-xs text-gray-500">
       {icon}
@@ -598,7 +872,7 @@ function Stat({ icon, value, label }: { icon: React.ReactNode; value: string | n
   );
 }
 
-function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+function EmptyState({ icon, text }: { icon: ReactNode; text: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-3">
       <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center">

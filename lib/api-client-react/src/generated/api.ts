@@ -21,6 +21,7 @@ import type {
   AccountResponse,
   CreateListingRequest,
   CreateListingResponse,
+  DeleteListingResponse,
   FavoriteMutationRequest,
   FavoriteStateResponse,
   FavoriteUserParams,
@@ -28,6 +29,8 @@ import type {
   ListingSort,
   ListListingsResponse,
   ListFavoritesResponse,
+  UpdateListingRequest,
+  UpdateListingResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -367,6 +370,169 @@ export function useCreateListing<
   TContext
 > {
   const mutationOptions = getCreateListingMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+export interface UpdateListingVariables {
+  listingId: number;
+  data: UpdateListingRequest;
+}
+
+/**
+ * Updates a listing owned by the current user
+ * @summary Update listing
+ */
+export const getUpdateListingUrl = (listingId: number) => {
+  return `/api/listings/${listingId}`;
+};
+
+export const updateListing = async (
+  listingId: number,
+  updateListingRequest: UpdateListingRequest,
+  options?: RequestInit,
+): Promise<UpdateListingResponse> => {
+  return customFetch<UpdateListingResponse>(getUpdateListingUrl(listingId), {
+    ...options,
+    method: "PATCH",
+    body: JSON.stringify(updateListingRequest),
+  });
+};
+
+export const getUpdateListingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateListing>>,
+    TError,
+    UpdateListingVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateListing>>,
+    UpdateListingVariables
+  > = ({ listingId, data }) => updateListing(listingId, data, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof updateListing>>,
+    TError,
+    UpdateListingVariables,
+    TContext
+  >;
+};
+
+export type UpdateListingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateListing>>
+>;
+export type UpdateListingMutationBody = UpdateListingVariables;
+export type UpdateListingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update listing
+ */
+export function useUpdateListing<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateListing>>,
+    TError,
+    UpdateListingVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateListing>>,
+  TError,
+  UpdateListingVariables,
+  TContext
+> {
+  const mutationOptions = getUpdateListingMutationOptions(options);
+
+  return useMutation(mutationOptions);
+}
+
+export interface DeleteListingVariables {
+  listingId: number;
+}
+
+/**
+ * Deletes a listing owned by the current user
+ * @summary Delete listing
+ */
+export const getDeleteListingUrl = (listingId: number) => {
+  return `/api/listings/${listingId}`;
+};
+
+export const deleteListing = async (
+  listingId: number,
+  options?: RequestInit,
+): Promise<DeleteListingResponse> => {
+  return customFetch<DeleteListingResponse>(getDeleteListingUrl(listingId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteListingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteListing>>,
+    TError,
+    DeleteListingVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteListing>>,
+    DeleteListingVariables
+  > = ({ listingId }) => deleteListing(listingId, requestOptions);
+
+  return { mutationFn, ...mutationOptions } as UseMutationOptions<
+    Awaited<ReturnType<typeof deleteListing>>,
+    TError,
+    DeleteListingVariables,
+    TContext
+  >;
+};
+
+export type DeleteListingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteListing>>
+>;
+export type DeleteListingMutationBody = DeleteListingVariables;
+export type DeleteListingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete listing
+ */
+export function useDeleteListing<
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteListing>>,
+    TError,
+    DeleteListingVariables,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteListing>>,
+  TError,
+  DeleteListingVariables,
+  TContext
+> {
+  const mutationOptions = getDeleteListingMutationOptions(options);
 
   return useMutation(mutationOptions);
 }

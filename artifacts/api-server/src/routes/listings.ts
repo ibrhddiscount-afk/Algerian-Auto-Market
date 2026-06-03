@@ -4,6 +4,7 @@ import {
   AccountResponse,
   CreateListingRequest,
   CreateListingResponse,
+  DeleteListingResponse,
   FavoriteMutationRequest,
   FavoriteStateResponse,
   FavoriteUserParamsSchema,
@@ -11,6 +12,8 @@ import {
   ListFavoritesResponse,
   ListingDetailResponse,
   ListingsQuerySchema,
+  UpdateListingRequest,
+  UpdateListingResponse,
 } from "@workspace/api-zod";
 import {
   db,
@@ -26,6 +29,7 @@ const DEV_FALLBACK_EMAIL = "dev.user@autodz.local";
 type ListingRow = Awaited<ReturnType<typeof selectListings>>[number];
 type UserRow = typeof usersTable.$inferSelect;
 type ListingPhotoRow = typeof listingPhotosTable.$inferSelect;
+type ListingUpdate = Partial<typeof listingsTable.$inferInsert>;
 
 interface AuthIdentity {
   sub?: string;
@@ -274,14 +278,55 @@ async function resolveRequestUserOrRespond(
   }
 }
 
-async function ensureListingExists(listingId: number) {
+async function resolveOptionalRequestUser(req: Request) {
+  const identity = getAuthIdentity(req);
+
+  if (identity) {
+    return { user: await upsertIdentityUser(identity), isDevFallback: false };
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return { user: await resolveDevFallbackUser(), isDevFallback: true };
+  }
+
+  return undefined;
+}
+
+async function ensureActiveListingExists(listingId: number) {
   const [listing] = await db
     .select({ id: listingsTable.id })
+    .from(listingsTable)
+    .where(and(eq(listingsTable.id, listingId), eq(listingsTable.status, "active")))
+    .limit(1);
+
+  return Boolean(listing);
+}
+
+async function resolveOwnedListingOrRespond(
+  req: Request,
+  res: Response,
+  listingId: number,
+) {
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return undefined;
+
+  const [listing] = await db
+    .select({ id: listingsTable.id, sellerId: listingsTable.sellerId })
     .from(listingsTable)
     .where(eq(listingsTable.id, listingId))
     .limit(1);
 
-  return Boolean(listing);
+  if (!listing) {
+    res.status(404).json({ message: "Listing not found" });
+    return undefined;
+  }
+
+  if (listing.sellerId !== resolved.user.id) {
+    res.status(403).json({ message: "Vous ne pouvez modifier que vos propres annonces." });
+    return undefined;
+  }
+
+  return { listing, user: resolved.user };
 }
 
 function parseListingId(value: string | undefined) {
@@ -338,6 +383,14 @@ function buildListingWhere(query: ReturnType<typeof ListingsQuerySchema.parse>) 
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
+function publicListingsWhere(query?: ReturnType<typeof ListingsQuerySchema.parse>) {
+  const queryWhere = query ? buildListingWhere(query) : undefined;
+
+  return queryWhere
+    ? and(eq(listingsTable.status, "active"), queryWhere)
+    : eq(listingsTable.status, "active");
+}
+
 function orderBy(sort = "recent") {
   switch (sort) {
     case "prix_asc":
@@ -370,6 +423,7 @@ function selectListings() {
       color: listingsTable.color,
       verified: listingsTable.verified,
       badge: listingsTable.badge,
+      status: listingsTable.status,
       description: listingsTable.description,
       couleur: listingsTable.couleur,
       portes: listingsTable.portes,
@@ -457,6 +511,8 @@ function toApiListing(
     color: row.color,
     verified: row.verified,
     ...(row.badge ? { badge: row.badge } : {}),
+    status: row.status,
+    description: row.description,
     ...(photos.length > 0 ? { photos } : {}),
   };
 }
@@ -505,23 +561,51 @@ function toAccountUser(user: UserRow, isDevFallback: boolean) {
   };
 }
 
+async function buildListingDetailResponse(
+  listingId: number,
+  responseSchema: typeof ListingDetailResponse,
+) {
+  const [listing] = await selectListings()
+    .where(eq(listingsTable.id, listingId))
+    .limit(1);
+
+  if (!listing) return undefined;
+
+  const [{ total: sellerTotalAds }] = await db
+    .select({ total: count() })
+    .from(listingsTable)
+    .where(eq(listingsTable.sellerId, listing.sellerId));
+
+  const photosByListingId = await getPhotosByListingIds([listing.id]);
+
+  return responseSchema.parse({
+    listing: toApiListing(listing, photosByListingId),
+    detail: toApiDetail(listing, sellerTotalAds),
+    similar: [],
+  });
+}
+
 async function getFacets() {
   const [marques, wilayas, fuels, transmissions] = await Promise.all([
     db
       .selectDistinct({ value: listingsTable.marque })
       .from(listingsTable)
+      .where(eq(listingsTable.status, "active"))
       .orderBy(asc(listingsTable.marque)),
     db
       .selectDistinct({ value: listingsTable.wilaya })
       .from(listingsTable)
+      .where(eq(listingsTable.status, "active"))
       .orderBy(asc(listingsTable.wilaya)),
     db
       .selectDistinct({ value: listingsTable.fuel })
       .from(listingsTable)
+      .where(eq(listingsTable.status, "active"))
       .orderBy(asc(listingsTable.fuel)),
     db
       .selectDistinct({ value: listingsTable.transmission })
       .from(listingsTable)
+      .where(eq(listingsTable.status, "active"))
       .orderBy(asc(listingsTable.transmission)),
   ]);
 
@@ -537,7 +621,7 @@ router.get("/listings", async (req, res) => {
   const query = ListingsQuerySchema.parse(req.query);
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? 9;
-  const where = buildListingWhere(query);
+  const where = publicListingsWhere(query);
   const [{ total }] = await db
     .select({ total: count() })
     .from(listingsTable)
@@ -579,7 +663,12 @@ router.get("/favorites", async (req, res) => {
 
   const listingIds = favoriteRows.map((favorite) => favorite.listingId);
   const rows = listingIds.length
-    ? await selectListings().where(inArray(listingsTable.id, listingIds))
+    ? await selectListings().where(
+        and(
+          inArray(listingsTable.id, listingIds),
+          eq(listingsTable.status, "active"),
+        ),
+      )
     : [];
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const photosByListingId = await getPhotosByListingIds(rows.map((row) => row.id));
@@ -618,7 +707,7 @@ router.get("/account", async (req, res) => {
 
       return {
         listing: toApiListing(row, listingPhotosById),
-        status: "active" as const,
+        status: row.status,
         views: row.views,
         favorites: favoriteCount,
         postedDaysAgo: daysAgo(row.createdAt),
@@ -635,7 +724,12 @@ router.get("/account", async (req, res) => {
     .orderBy(desc(favoritesTable.createdAt));
   const favoriteIds = favoriteRows.map((favorite) => favorite.listingId);
   const favorites = favoriteIds.length
-    ? await selectListings().where(inArray(listingsTable.id, favoriteIds))
+    ? await selectListings().where(
+        and(
+          inArray(listingsTable.id, favoriteIds),
+          eq(listingsTable.status, "active"),
+        ),
+      )
     : [];
   const favoritesById = new Map(favorites.map((listing) => [listing.id, listing]));
   const favoritePhotosById = await getPhotosByListingIds(
@@ -764,6 +858,79 @@ router.post("/listings", async (req, res) => {
   }
 });
 
+router.patch("/listings/:id", async (req, res) => {
+  const listingId = parseListingId(req.params.id);
+
+  if (!listingId) {
+    res.status(400).json({ message: "Invalid listing id" });
+    return;
+  }
+
+  const parsed = UpdateListingRequest.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      message: "Données invalides pour modifier l'annonce",
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+
+  const body = parsed.data;
+  const updateData: ListingUpdate = {};
+
+  if (body.title !== undefined) updateData.title = body.title;
+  if (body.priceRaw !== undefined) updateData.priceRaw = body.priceRaw;
+  if (body.kmRaw !== undefined) updateData.kmRaw = body.kmRaw;
+  if (body.wilaya !== undefined) updateData.wilaya = body.wilaya;
+  if (body.location !== undefined) updateData.location = body.location;
+  if (body.description !== undefined) updateData.description = body.description;
+  if (body.status !== undefined) updateData.status = body.status;
+
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ message: "Aucune modification fournie" });
+    return;
+  }
+
+  const owned = await resolveOwnedListingOrRespond(req, res, listingId);
+  if (!owned) return;
+
+  await db
+    .update(listingsTable)
+    .set({ ...updateData, updatedAt: new Date() })
+    .where(eq(listingsTable.id, listingId));
+
+  const data = await buildListingDetailResponse(listingId, UpdateListingResponse);
+
+  if (!data) {
+    res.status(404).json({ message: "Listing not found" });
+    return;
+  }
+
+  res.json(data);
+});
+
+router.delete("/listings/:id", async (req, res) => {
+  const listingId = parseListingId(req.params.id);
+
+  if (!listingId) {
+    res.status(400).json({ message: "Invalid listing id" });
+    return;
+  }
+
+  const owned = await resolveOwnedListingOrRespond(req, res, listingId);
+  if (!owned) return;
+
+  await db.delete(listingsTable).where(eq(listingsTable.id, listingId));
+
+  const data = DeleteListingResponse.parse({
+    id: listingId,
+    deleted: true,
+  });
+
+  res.json(data);
+});
+
 router.post("/listings/:id/favorite", async (req, res) => {
   const listingId = parseListingId(req.params.id);
 
@@ -772,7 +939,7 @@ router.post("/listings/:id/favorite", async (req, res) => {
     return;
   }
 
-  if (!(await ensureListingExists(listingId))) {
+  if (!(await ensureActiveListingExists(listingId))) {
     res.status(404).json({ message: "Listing not found" });
     return;
   }
@@ -864,6 +1031,15 @@ router.get("/listings/:id", async (req, res) => {
     return;
   }
 
+  if (listing.status !== "active") {
+    const resolved = await resolveOptionalRequestUser(req);
+
+    if (resolved?.user.id !== listing.sellerId) {
+      res.status(404).json({ message: "Listing not found" });
+      return;
+    }
+  }
+
   const [{ total: sellerTotalAds }] = await db
     .select({ total: count() })
     .from(listingsTable)
@@ -873,6 +1049,7 @@ router.get("/listings/:id", async (req, res) => {
     .where(
       and(
         ne(listingsTable.id, id),
+        eq(listingsTable.status, "active"),
         or(
           eq(listingsTable.marque, listing.marque),
           and(

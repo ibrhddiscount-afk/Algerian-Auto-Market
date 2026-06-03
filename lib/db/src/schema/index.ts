@@ -37,6 +37,12 @@ export const listingConditionEnum = pgEnum("listing_condition", [
   "Passable",
 ]);
 
+export const listingStatusEnum = pgEnum("listing_status", [
+  "active",
+  "draft",
+  "sold",
+]);
+
 export const usersTable = pgTable(
   "users",
   {
@@ -85,6 +91,7 @@ export const listingsTable = pgTable(
     color: varchar("color", { length: 120 }).notNull().default("from-gray-200 to-gray-400"),
     verified: boolean("verified").notNull().default(false),
     badge: varchar("badge", { length: 40 }),
+    status: listingStatusEnum("status").notNull().default("active"),
     description: text("description").notNull().default(""),
     couleur: varchar("couleur", { length: 80 }).notNull().default("Non précisée"),
     portes: integer("portes").notNull().default(5),
@@ -112,6 +119,7 @@ export const listingsTable = pgTable(
     yearIdx: index("listings_year_idx").on(table.year),
     kmIdx: index("listings_km_raw_idx").on(table.kmRaw),
     verifiedIdx: index("listings_verified_idx").on(table.verified),
+    statusIdx: index("listings_status_idx").on(table.status),
     createdAtIdx: index("listings_created_at_idx").on(table.createdAt),
   }),
 );

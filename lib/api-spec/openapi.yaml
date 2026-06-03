@@ -142,6 +142,56 @@ paths:
                 $ref: "#/components/schemas/ListingDetailResponse"
         "404":
           description: Listing not found
+    patch:
+      operationId: updateListing
+      tags: [listings]
+      summary: Update listing
+      description: Updates a listing owned by the current user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateListingRequest"
+      responses:
+        "200":
+          description: Updated listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateListingResponse"
+        "400":
+          description: Invalid listing payload
+        "403":
+          description: Listing is not owned by the current user
+        "404":
+          description: Listing not found
+    delete:
+      operationId: deleteListing
+      tags: [listings]
+      summary: Delete listing
+      description: Deletes a listing owned by the current user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Deleted listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteListingResponse"
+        "403":
+          description: Listing is not owned by the current user
+        "404":
+          description: Listing not found
   /listings/{id}/favorite:
     post:
       operationId: addFavorite
@@ -234,6 +284,8 @@ components:
         - price
         - color
         - verified
+        - status
+        - description
       properties:
         id: { type: integer }
         title: { type: string }
@@ -255,6 +307,9 @@ components:
         color: { type: string }
         verified: { type: boolean }
         badge: { type: string }
+        status:
+          $ref: "#/components/schemas/ListingStatus"
+        description: { type: string }
         photos:
           type: array
           items:
@@ -437,6 +492,28 @@ components:
           $ref: "#/components/schemas/CreateListingSeller"
     CreateListingResponse:
       $ref: "#/components/schemas/ListingDetailResponse"
+    ListingStatus:
+      type: string
+      enum: [active, draft, sold]
+    UpdateListingRequest:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 180 }
+        priceRaw: { type: integer, minimum: 1, maximum: 1000000000 }
+        kmRaw: { type: integer, minimum: 0, maximum: 2000000 }
+        wilaya: { type: string, minLength: 1, maxLength: 80 }
+        location: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 1000 }
+        status:
+          $ref: "#/components/schemas/ListingStatus"
+    UpdateListingResponse:
+      $ref: "#/components/schemas/ListingDetailResponse"
+    DeleteListingResponse:
+      type: object
+      required: [id, deleted]
+      properties:
+        id: { type: integer }
+        deleted: { type: boolean }
     FavoriteUserParams:
       type: object
       properties:
@@ -511,8 +588,7 @@ components:
         listing:
           $ref: "#/components/schemas/Listing"
         status:
-          type: string
-          enum: [active, paused, expired, sold]
+          $ref: "#/components/schemas/ListingStatus"
         views: { type: integer }
         favorites: { type: integer }
         postedDaysAgo: { type: integer }

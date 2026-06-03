@@ -25,6 +25,8 @@ export type ListingSort =
   | "km_asc"
   | "annee_desc";
 
+export type ListingStatus = "active" | "draft" | "sold";
+
 export interface ListingPhoto {
   url: string;
   alt?: string;
@@ -49,6 +51,8 @@ export interface Listing {
   color: string;
   verified: boolean;
   badge?: string;
+  status: ListingStatus;
+  description: string;
   photos?: ListingPhoto[];
 }
 
@@ -141,6 +145,23 @@ export interface CreateListingRequest {
 
 export type CreateListingResponse = ListingDetailResponse;
 
+export interface UpdateListingRequest {
+  title?: string;
+  priceRaw?: number;
+  kmRaw?: number;
+  wilaya?: string;
+  location?: string;
+  description?: string;
+  status?: ListingStatus;
+}
+
+export type UpdateListingResponse = ListingDetailResponse;
+
+export interface DeleteListingResponse {
+  id: number;
+  deleted: boolean;
+}
+
 export interface FavoriteUserParams {
   userId?: number;
 }
@@ -180,7 +201,7 @@ export interface AccountUser {
 
 export interface AccountListing {
   listing: Listing;
-  status: "active" | "paused" | "expired" | "sold";
+  status: ListingStatus;
   views: number;
   favorites: number;
   postedDaysAgo: number;
