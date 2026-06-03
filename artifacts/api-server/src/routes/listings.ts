@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, or, type SQL } from "drizzle-orm";
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import {
   AccountResponse,
   CreateListingRequest,
@@ -32,6 +32,10 @@ interface AuthIdentity {
   name?: string;
   phone?: string;
   wilaya?: string;
+}
+
+class AuthRequiredError extends Error {
+  readonly name = "AuthRequiredError";
 }
 
 const LISTING_FUELS = [
@@ -245,12 +249,28 @@ async function resolveRequestUser(req: Request, explicitUserId?: number) {
     if (user) return { user, isDevFallback: false };
   }
 
+  if (process.env.NODE_ENV === "production") {
+    throw new AuthRequiredError("Authentication required");
+  }
+
   return { user: await resolveDevFallbackUser(), isDevFallback: true };
 }
 
-async function resolveRequestUserId(req: Request, explicitUserId?: number) {
-  const { user } = await resolveRequestUser(req, explicitUserId);
-  return user.id;
+async function resolveRequestUserOrRespond(
+  req: Request,
+  res: Response,
+  explicitUserId?: number,
+) {
+  try {
+    return await resolveRequestUser(req, explicitUserId);
+  } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      res.status(401).json({ message: "Authentication required" });
+      return undefined;
+    }
+
+    throw error;
+  }
 }
 
 async function ensureListingExists(listingId: number) {
@@ -497,7 +517,9 @@ router.get("/listings", async (req, res) => {
 
 router.get("/favorites", async (req, res) => {
   const query = FavoriteUserParamsSchema.parse(req.query);
-  const userId = await resolveRequestUserId(req, query.userId);
+  const resolved = await resolveRequestUserOrRespond(req, res, query.userId);
+  if (!resolved) return;
+  const userId = resolved.user.id;
 
   const favoriteRows = await db
     .select({ listingId: favoritesTable.listingId })
@@ -524,7 +546,9 @@ router.get("/favorites", async (req, res) => {
 });
 
 router.get("/account", async (req, res) => {
-  const { user, isDevFallback } = await resolveRequestUser(req);
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const { user, isDevFallback } = resolved;
 
   const listingRows = await selectListings()
     .where(eq(listingsTable.sellerId, user.id))
@@ -585,7 +609,9 @@ router.post("/listings", async (req, res) => {
 
   const body = parsed.data;
   const title = `${body.marque} ${body.modele}`.trim();
-  const { user: currentUser } = await resolveRequestUser(req);
+  const resolved = await resolveRequestUserOrRespond(req, res);
+  if (!resolved) return;
+  const { user: currentUser } = resolved;
 
   const createdListing = await db.transaction(async (tx) => {
     const [seller] = await tx
@@ -701,7 +727,9 @@ router.post("/listings/:id/favorite", async (req, res) => {
     return;
   }
 
-  const userId = await resolveRequestUserId(req, parsed.data?.userId);
+  const resolved = await resolveRequestUserOrRespond(req, res, parsed.data?.userId);
+  if (!resolved) return;
+  const userId = resolved.user.id;
 
   await db
     .insert(favoritesTable)
@@ -737,7 +765,9 @@ router.delete("/listings/:id/favorite", async (req, res) => {
     return;
   }
 
-  const userId = await resolveRequestUserId(req, parsed.data.userId);
+  const resolved = await resolveRequestUserOrRespond(req, res, parsed.data.userId);
+  if (!resolved) return;
+  const userId = resolved.user.id;
 
   await db
     .delete(favoritesTable)

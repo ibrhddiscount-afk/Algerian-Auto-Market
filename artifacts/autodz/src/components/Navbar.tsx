@@ -1,13 +1,34 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Heart, User, Plus, Menu, X, ChevronDown, Car } from "lucide-react";
+import { Heart, User, Plus, Menu, X, ChevronDown, Car, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+
+function initials(nameOrEmail: string) {
+  return nameOrEmail
+    .split(/[.\s@_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "AD";
+}
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [buyerOpen, setBuyerOpen] = useState(false);
   const [location, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const { user, isDevFallback, signOut } = useAuth();
+  const accountLabel = user?.name ?? user?.email ?? (isDevFallback ? "Mode dev" : "Connexion");
+  const isAuthenticated = Boolean(user);
 
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
+
+  const handleSignOut = async () => {
+    await signOut();
+    queryClient.clear();
+    navigate("/");
+  };
 
   const navLink = (href: string, label: string) => (
     <button
@@ -109,17 +130,35 @@ export default function Navbar() {
 
           {/* Right actions */}
           <div className="hidden lg:flex items-center gap-4">
-            <button className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-[#1a7a3c] transition-colors">
+            <button
+              onClick={() => navigate(isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte")}
+              className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-[#1a7a3c] transition-colors"
+            >
               <Heart className="w-4 h-4" />
               <span>Favoris</span>
             </button>
             <button
-              onClick={() => navigate("/mon-compte")}
-              className={`flex items-center gap-1.5 text-sm transition-colors ${isActive("/mon-compte") ? "text-[#1a7a3c] font-semibold" : "text-gray-700 hover:text-[#1a7a3c]"}`}
+              onClick={() => navigate(isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte")}
+              className={`flex items-center gap-1.5 text-sm transition-colors ${isActive("/mon-compte") || isActive("/connexion") ? "text-[#1a7a3c] font-semibold" : "text-gray-700 hover:text-[#1a7a3c]"}`}
             >
-              <User className="w-4 h-4" />
-              <span>Mon compte</span>
+              {isAuthenticated ? (
+                <span className="w-7 h-7 rounded-full bg-[#f0faf4] border border-[#1a7a3c]/20 text-[#1a7a3c] text-[10px] font-extrabold flex items-center justify-center">
+                  {initials(accountLabel)}
+                </span>
+              ) : (
+                <User className="w-4 h-4" />
+              )}
+              <span>{isAuthenticated || isDevFallback ? accountLabel : "Connexion"}</span>
             </button>
+            {isAuthenticated && (
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-500 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Déconnexion
+              </button>
+            )}
             <button
               onClick={() => navigate("/deposer-annonce")}
               className="flex items-center gap-1.5 bg-[#1a7a3c] hover:bg-[#15632f] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -148,8 +187,8 @@ export default function Navbar() {
               ["Concessionnaires","#"],
               ["Blog",            "#"],
               ["Contact",         "#"],
-              ["Favoris",         "#"],
-              ["Mon compte",      "#"],
+              ["Favoris",         isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte"],
+              [isAuthenticated || isDevFallback ? accountLabel : "Connexion", isAuthenticated || isDevFallback ? "/mon-compte" : "/connexion?redirect=/mon-compte"],
             ].map(([label, href]) => (
               <button
                 key={label}
@@ -161,6 +200,14 @@ export default function Navbar() {
                 {label}
               </button>
             ))}
+            {isAuthenticated && (
+              <button
+                onClick={() => { void handleSignOut(); setMobileOpen(false); }}
+                className="block w-full text-left text-sm font-medium py-2 px-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+              >
+                Déconnexion
+              </button>
+            )}
             <button
               onClick={() => { navigate("/deposer-annonce"); setMobileOpen(false); }}
               className="flex items-center justify-center gap-2 w-full bg-[#1a7a3c] hover:bg-[#15632f] text-white text-sm font-semibold px-4 py-2.5 rounded-xl mt-2 transition-colors"
